@@ -121,8 +121,8 @@ p{margin:0}
 .chip.on small{color:var(--cheese)}
 .cats{position:sticky;top:0;z-index:4;background:var(--dough);display:flex;gap:6px;overflow-x:auto;padding:12px 14px 10px;scrollbar-width:none;border-bottom:1px solid var(--line);margin-top:6px}
 .cats::-webkit-scrollbar{display:none}
-.cats button{flex:none;font-family:var(--f-cond);font-weight:700;font-size:15px;letter-spacing:.03em;text-transform:uppercase;padding:6px 12px;border-radius:8px;background:var(--dough-2);min-height:36px}
-.cats button.fav{background:var(--tomato-soft);color:var(--tomato-d)}
+.cats button{flex:none;white-space:nowrap;font-family:var(--f-cond);font-weight:700;font-size:15px;letter-spacing:.03em;text-transform:uppercase;padding:6px 12px;border-radius:8px;background:var(--dough-2);min-height:36px}
+.cats button.cat-fav{background:var(--tomato-soft);color:var(--tomato-d)}
 .sec{padding:16px 14px 2px;scroll-margin-top:60px;display:grid;gap:10px}
 .sec h2{font-family:var(--f-display);font-weight:400;font-size:25px;text-transform:uppercase;transform:skewX(-6deg);transform-origin:left;line-height:1}
 .sec-note{font-size:13px;color:var(--muted);margin-top:-4px}
@@ -761,7 +761,7 @@ function menuList(){const items=P.filter(visible);
   if(U.q.trim()||U.filter){const r=items.filter(matches);if(!r.length)return`<div class="empty"><strong>Aucun produit trouvé</strong><span>Essaie un autre mot, par exemple « reblochon » ou « thon ».</span><button class="btn btn-dark btn-sm" data-a="clear-search">Effacer la recherche</button></div>`;
     return`<div class="sec"><p class="sec-note">${r.length} résultat${r.length>1?'s':''}</p>${r.map(pCard).join('')}</div>`}
   const favs=items.filter(p=>S.favs.includes(p.id));const cats=(favs.length?[['favs','Favoris']]:[]).concat(CATS);
-  return`<nav class="cats" aria-label="Catégories">${cats.map(([k,l])=>`<button class="${k==='favs'?'fav':''}" data-a="cat" data-v="${k}">${l}</button>`).join('')}</nav>`+
+  return`<nav class="cats" aria-label="Catégories">${cats.map(([k,l])=>`<button class="${k==='favs'?'cat-fav':''}" data-a="cat" data-v="${k}">${l}</button>`).join('')}</nav>`+
     (favs.length?`<section class="sec" id="sec-favs"><h2>Tes favoris</h2>${favs.map(pCard).join('')}</section>`:'')+
     CATS.map(([k,l])=>{const list=items.filter(p=>p.cat===k);if(!list.length)return'';const note=k==='tomate'?`<p class="sec-note">Toutes nos pizzas existent en Classique et en XL, et peuvent être bi-goût. ${tbc('Prix XL à confirmer')}</p>`:'';return`<section class="sec" id="sec-${k}"><h2>${l}</h2>${note}${list.map(pCard).join('')}</section>`}).join('')}
 function desc(p){return p.kind==='pizza'?BASES[p.base]+', '+p.ing.join(', ').toLowerCase():p.d}
