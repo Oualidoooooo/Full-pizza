@@ -1,4 +1,10 @@
-<title>Full Pizza App</title>
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1B1512">
+<title>Full Pizza</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,6 +25,7 @@
 }
 *{box-sizing:border-box}
 html,body{height:100%}
+body{margin:0}
 body{background:var(--table);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.4;-webkit-font-smoothing:antialiased}
 button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0;text-align:inherit}
 button:disabled{cursor:not-allowed}
@@ -445,7 +452,8 @@ textarea.note{width:100%;min-height:64px;border-radius:12px;border:1.5px solid v
 .driver-sum{display:flex;flex-wrap:wrap;gap:10px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
-
+</head>
+<body>
 <div class="app" id="app">
   <header class="demo-bar">
     <div class="demo-title">
@@ -1180,3 +1188,5 @@ setInterval(()=>{const ae=document.activeElement;if(ae&&ae.matches&&ae.matches('
   ensureDay();renderAll(false)},20000);
 renderAll();
 </script>
+</body>
+</html>
