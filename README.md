@@ -2,6 +2,13 @@
 
 Appli de commande en ligne pour **Full Pizza**, 121 Rue Nationale, 69400 Villefranche-sur-Saône.
 
+## Voir le site
+
+- **Site en ligne (GitHub Pages)** : https://oualidoooooo.github.io/Full-pizza/
+- **Version Claude** (privée, réservée au propriétaire) : https://claude.ai/artifact/QAdouwuznFbCj9nJn9F4Wz
+
+Les deux affichent exactement la même version du fichier `index.html`.
+
 ## Étape 1 : maquette (ce dossier)
 
 `index.html` contient une maquette complète et cliquable, sans serveur :
