@@ -350,12 +350,27 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
       <p class="dim" style="font-size:12.5px">Garde ton code pour toi : quiconque le connaît peut lire tes alertes. Les messages restent 12 h sur le relais, l'historique est gardé sur ton téléphone.</p>
     </div>
 
+    <div class="sec-title"><h2>Alertes sur Telegram</h2></div>
+    <div class="card">
+      <p class="muted" style="font-size:13.5px;margin-bottom:12px">Reçois chaque pré-alerte, signal et résultat dans Telegram, même téléphone verrouillé.</p>
+      <ol class="steps">
+        <li>Dans Telegram, ouvre ton bot (celui créé avec <b>@BotFather</b>) et envoie <b>/start</b>.</li>
+        <li>Colle ici le jeton donné par BotFather, puis touche <b>Vérifier</b> : tu dois recevoir un message de test.</li>
+        <li>Dans MT5, paramètres du robot : <b>Telegram = true</b>, colle le même jeton dans <b>Telegram : token du bot</b> et laisse <b>chat id</b> vide : le robot le trouve tout seul.</li>
+      </ol>
+      <label class="field" style="margin-top:4px"><span>Jeton du bot</span>
+        <input class="input num" id="tgToken" placeholder="123456789:AA…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <button class="btn primary block" id="tgCheck" style="margin-top:10px">Vérifier et envoyer un test</button>
+      <div id="tgOut"></div>
+      <p class="dim" style="font-size:12px;margin-top:10px">Le jeton reste sur ce téléphone et n'est envoyé qu'à Telegram. Ne le partage avec personne : il permet de contrôler ton bot.</p>
+    </div>
+
     <div class="sec-title"><h2>Alertes même appli fermée</h2></div>
     <div class="card">
       <p class="muted" style="font-size:13.5px;margin-bottom:12px">Un navigateur ne peut pas réveiller ton téléphone quand l'appli est fermée. Pour ne rater aucun signal, ajoute l'une de ces deux options :</p>
       <ol class="steps">
         <li><b>Appli ntfy</b> (gratuite) : installe <b>ntfy</b> depuis l'App Store ou le Play Store, touche <b>+</b>, colle ton code comme nom de sujet, serveur <code>ntfy.sh</code>. Les signaux sonnent comme un SMS.</li>
-        <li><b>Telegram</b> : dans les paramètres du robot, mets <b>Telegram = true</b> avec le jeton de ton bot et ton chat id (voir le guide du robot).</li>
+        <li><b>Telegram</b> : voir la section juste au-dessus.</li>
       </ol>
       <button class="btn block" id="copyCode2">Copier mon code pour ntfy</button>
       <p class="dim" style="font-size:12px;margin-top:10px">Les mises à jour du compte (toutes les 15 min) partent en priorité minimale : elles ne sonnent pas.</p>
@@ -1004,6 +1019,43 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     applyMode(); toast("Connecté au robot."); go("home");
   };
   $("testBtn").onclick = sendTest;
+
+  // ---------- Telegram ----------
+  async function tgCall(token, method, body) {
+    const r = await fetch("https://api.telegram.org/bot" + token + "/" + method, body
+      ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : undefined);
+    let j = null; try { j = await r.json(); } catch (e) {}
+    return { status: r.status, ok: !!(j && j.ok), data: j };
+  }
+
+  function tgShow(kind, html) {
+    const color = kind === "ok" ? "var(--buy)" : kind === "warn" ? "var(--gold)" : "var(--sell)";
+    $("tgOut").innerHTML = '<div style="margin-top:12px;padding:12px;border-radius:12px;background:var(--bg2);border:1px solid var(--line);font-size:13.5px"><b style="color:' + color + '">' + html + "</div>";
+  }
+
+  async function tgCheck() {
+    const token = $("tgToken").value.trim();
+    if (!/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(token)) return tgShow("err", "Jeton invalide.</b><br>Copie-le en entier depuis BotFather : il ressemble à 123456789:AAH….");
+    store.set("tgToken", token);
+    const btn = $("tgCheck"); btn.disabled = true; btn.textContent = "Vérification…";
+    try {
+      const me = await tgCall(token, "getMe");
+      if (!me.ok) return tgShow("err", "Jeton refusé par Telegram.</b><br>Recopie-le depuis BotFather. Si tu as fait /revoke, utilise le nouveau.");
+      const name = me.data.result.username;
+      const up = await tgCall(token, "getUpdates");
+      const chats = ((up.data && up.data.result) || []).map((u) => (u.message || u.edited_message || {}).chat).filter((c) => c && c.type === "private");
+      if (!chats.length) return tgShow("warn", "Ton bot @" + esc(name) + " fonctionne.</b><br>Ouvre-le dans Telegram, envoie <b>/start</b>, puis touche à nouveau Vérifier.");
+      const chat = chats[chats.length - 1];
+      const sent = await tgCall(token, "sendMessage", { chat_id: chat.id, text: "✅ AlertesPro : ton bot Telegram fonctionne.\nUne fois le robot MT5 réglé, tes pré-alertes, signaux et résultats arriveront ici." });
+      if (!sent.ok) return tgShow("err", "Message de test refusé.</b><br>Renvoie /start au bot @" + esc(name) + " puis réessaie.");
+      store.set("tgChat", String(chat.id));
+      tgShow("ok", "C'est bon ! Message de test envoyé à @" + esc(name) + ".</b><br>Ton chat id : <b class=\"num\">" + esc(chat.id) + '</b> <button class="mini-btn" data-copy="' + esc(chat.id) + '">Copier</button>' +
+        "<br>Dernière étape dans MT5 : <b>Telegram = true</b> et ce jeton dans <b>Telegram : token du bot</b>.");
+    } catch (e) {
+      tgShow("err", "Pas de connexion avec Telegram.</b><br>Vérifie ta connexion internet et réessaie.");
+    } finally { btn.disabled = false; btn.textContent = "Vérifier et envoyer un test"; }
+  }
+  $("tgCheck").onclick = tgCheck;
   $("swDemo").onclick = () => { S.demo = !S.demo; store.set("demo", S.demo); applyMode(); toast(S.demo ? "Mode démo activé" : "Mode démo désactivé"); };
   $("swSound").onclick = () => { S.sound = !S.sound; store.set("sound", S.sound); $("swSound").classList.toggle("on", S.sound); if (S.sound) beep(); };
   $("swNotif").onclick = async () => {
@@ -1031,6 +1083,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
 
   // ---------- Démarrage ----------
   $("code").value = S.code;
+  $("tgToken").value = store.get("tgToken", "");
   $("swSound").classList.toggle("on", S.sound);
   $("swNotif").classList.toggle("on", S.notif);
   const c = store.get("calc", null);

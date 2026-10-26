@@ -14,7 +14,7 @@
 //|  Le robot ne passe AUCUN ordre : il surveille et il prévient.    |
 //+------------------------------------------------------------------+
 #property copyright "AlertesPro"
-#property version   "1.40"
+#property version   "1.41"
 #property description "Signaux avec stop loss / take profit / lot, suivi des résultats, calendrier économique, résumé du matin."
 #property description "Ne passe aucun ordre. Teste d'abord sur un compte démo."
 
@@ -27,7 +27,7 @@ input bool   InpPush         = true;          // Notification push (appli MT5 mo
 input bool   InpEmail        = false;         // E-mail (à configurer dans Outils > Options)
 input bool   InpTelegram     = false;         // Telegram
 input string InpTgToken      = "";            // Telegram : token du bot
-input string InpTgChatId     = "";            // Telegram : chat id
+input string InpTgChatId     = "";            // Telegram : chat id (laisse vide : il est trouvé tout seul)
 input bool   InpTestAtStart  = true;          // Envoyer un message de test au démarrage
 input bool   InpApp          = true;          // Appli AlertesPro (tableau de bord sur le téléphone)
 input string InpAppCode      = "";            // Appli : code de connexion (copie-le depuis l'appli)
@@ -142,6 +142,9 @@ double   g_statR      = 0.0;   // somme des R
 double   g_statGrossW = 0.0;   // somme des R gagnants
 double   g_statGrossL = 0.0;   // somme des R perdants (valeur positive)
 const string JOURNAL_FILE = "AlertesPro_journal.csv";
+const string TG_FILE      = "AlertesPro_telegram.txt";
+string   g_tgChat    = "";   // chat id trouvé automatiquement
+datetime g_tgLastTry = 0;
 string   g_coolKeys[];
 datetime g_coolTimes[];
 string   g_history[];
@@ -269,15 +272,124 @@ string UrlEncode(const string s)
    return out;
   }
 
+//--- chat id : celui des paramètres, sinon celui trouvé automatiquement
+string TgChat()
+  {
+   string c = InpTgChatId;
+   StringTrimLeft(c);
+   StringTrimRight(c);
+   return (c != "") ? c : g_tgChat;
+  }
+
+void TgSaveChat()
+  {
+   int h = FileOpen(TG_FILE, FILE_WRITE | FILE_TXT | FILE_ANSI);
+   if(h == INVALID_HANDLE)
+      return;
+   FileWriteString(h, g_tgChat);
+   FileClose(h);
+  }
+
+void TgLoadChat()
+  {
+   if(!FileIsExist(TG_FILE))
+      return;
+   int h = FileOpen(TG_FILE, FILE_READ | FILE_TXT | FILE_ANSI);
+   if(h == INVALID_HANDLE)
+      return;
+   g_tgChat = FileReadString(h);
+   StringTrimLeft(g_tgChat);
+   StringTrimRight(g_tgChat);
+   FileClose(h);
+  }
+
+//--- cherche le chat id dans les derniers messages reçus par le bot (/start)
+bool TgFindChat()
+  {
+   static bool told = false;
+   if(InpTgToken == "" || MQLInfoInteger(MQL_TESTER))
+      return false;
+   char   post[], result[];
+   string resHeaders;
+   ResetLastError();
+   int code = WebRequest("GET", "https://api.telegram.org/bot" + InpTgToken + "/getUpdates", "",
+                         5000, post, result, resHeaders);
+   if(code == -1)
+     {
+      if(GetLastError() == 4014 && !told)
+        {
+         Print("Telegram : ajoute https://api.telegram.org dans Outils > Options > Expert Advisors > WebRequest.");
+         told = true;
+        }
+      return false;
+     }
+   if(code == 401 || code == 404)
+     {
+      if(!told)
+         Print("Telegram : jeton refusé. Recopie le token donné par @BotFather.");
+      told = true;
+      return false;
+     }
+   if(code != 200)
+      return false;
+   string json = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
+   string key  = "\"chat\":{\"id\":";
+   int p = StringFind(json, key);
+   if(p < 0)
+     {
+      if(!told)
+         Print("Telegram : envoie /start à ton bot dans Telegram, je trouverai ton chat id tout seul.");
+      told = true;
+      return false;
+     }
+   p += StringLen(key);
+   string id = "";
+   int n = StringLen(json);
+   while(p < n)
+     {
+      ushort c = StringGetCharacter(json, p);
+      if((c >= '0' && c <= '9') || c == '-')
+        {
+         id += ShortToString(c);
+         p++;
+        }
+      else
+         break;
+     }
+   if(id == "")
+      return false;
+   g_tgChat = id;
+   TgSaveChat();
+   Print("Telegram : chat id trouvé (", id, ").");
+   return true;
+  }
+
+//--- tant que le chat id manque : réessaie toutes les 20 secondes
+void CheckTelegram()
+  {
+   if(!InpTelegram || InpTgToken == "" || TgChat() != "" || MQLInfoInteger(MQL_TESTER))
+      return;
+   if(TimeLocal() - g_tgLastTry < 20)
+      return;
+   g_tgLastTry = TimeLocal();
+   if(TgFindChat())
+      SendTelegram("✅ AlertesPro : Telegram est connecté.\nTes pré-alertes, signaux et résultats arriveront ici.");
+  }
+
 bool SendTelegram(const string text)
   {
-   if(InpTgToken == "" || InpTgChatId == "")
+   if(InpTgToken == "")
      {
-      Print("Telegram : token ou chat id manquant.");
+      Print("Telegram : colle le token de ton bot dans les paramètres du robot.");
+      return false;
+     }
+   if(TgChat() == "")
+     {
+      Print("Telegram : chat id pas encore trouvé. Envoie /start à ton bot dans Telegram.");
       return false;
      }
    string url  = "https://api.telegram.org/bot" + InpTgToken + "/sendMessage";
-   string body = "chat_id=" + UrlEncode(InpTgChatId) + "&text=" + UrlEncode(text);
+   string body = "chat_id=" + UrlEncode(TgChat()) + "&text=" + UrlEncode(text);
    char   post[], result[];
    string resHeaders;
    StringToCharArray(body, post, 0, StringLen(body));
@@ -1455,6 +1567,15 @@ int OnInit()
    if(InpTrack)
       LoadJournal();
 
+   //--- Telegram : reprend ou cherche le chat id
+   if(InpTelegram && !MQLInfoInteger(MQL_TESTER))
+     {
+      g_tgChat = "";
+      TgLoadChat();
+      if(TgChat() == "")
+         TgFindChat();
+     }
+
    if(InpTestAtStart && !MQLInfoInteger(MQL_TESTER))
       Notify("AlertesPro démarré : " + IntegerToString(ArraySize(g_syms)) + " marché(s), " +
              TfName(InpTimeframe) + ", risque " + DoubleToString(InpRiskPct, 1) +
@@ -1523,6 +1644,7 @@ void OnTimer()
    CheckNews();
    CheckSummary();
    CheckStatus();
+   CheckTelegram();
    UpdatePanel();
   }
 

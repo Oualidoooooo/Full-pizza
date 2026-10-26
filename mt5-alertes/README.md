@@ -213,13 +213,15 @@ matin en entier, utilise Telegram.
 
 ### Telegram (conseillé : messages complets)
 
-1. Dans Telegram, parle à **@BotFather** → `/newbot` → note le **token**.
-2. Envoie un message à ton nouveau bot, puis ouvre
-   `https://api.telegram.org/bot<TON_TOKEN>/getUpdates` dans un navigateur :
-   le nombre après `"chat":{"id":` est ton **chat id**.
-3. Dans MT5 : **Outils > Options > Expert Advisors** → coche *Autoriser
+1. Dans Telegram, parle à **@BotFather** → `/newbot` → note le **jeton**.
+2. Ouvre ton nouveau bot et envoie-lui **/start**.
+3. Dans l'appli AlertesPro : **Réglages › Alertes sur Telegram**, colle le jeton
+   et touche **Vérifier** : tu reçois un message de test.
+4. Dans MT5 : **Outils > Options > Expert Advisors** → coche *Autoriser
    WebRequest* et ajoute `https://api.telegram.org`.
-4. Dans les paramètres du robot : `Telegram = true`, puis colle le token et le chat id.
+5. Dans les paramètres du robot : `Telegram = true` et colle le jeton dans
+   **Telegram : token du bot**. Laisse **chat id** vide : le robot le trouve
+   tout seul grâce à ton /start et t'envoie « Telegram est connecté ».
 
 ## Utiliser les lignes de prix
 
