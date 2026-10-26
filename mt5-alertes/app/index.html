@@ -340,6 +340,8 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
 
     <div class="sec-title"><h2>Mise en route</h2></div>
     <div class="card">
+      <a class="btn primary block" id="dlRobot" href="../MQL5/Experts/AlertesPro.mq5" download="AlertesPro.mq5" style="text-decoration:none;margin-bottom:8px">Télécharger le robot MT5 (AlertesPro.mq5)</a>
+      <p class="dim" style="font-size:12.5px;margin-bottom:14px">Ouvre cette page sur ton ordinateur pour télécharger le robot, puis copie-le dans MT5 : Fichier › Ouvrir le dossier des données › MQL5 › Experts. Compile-le avec F7 dans MetaEditor.</p>
       <ol class="steps">
         <li>Appuie sur <b>Nouveau code</b>, puis <b>Copier</b>.</li>
         <li>Dans MT5 : <b>Outils › Options › Expert Advisors</b>, coche <i>Autoriser WebRequest</i> et ajoute <code>https://ntfy.sh</code>.</li>
@@ -1033,6 +1035,8 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     $("tgOut").innerHTML = '<div style="margin-top:12px;padding:12px;border-radius:12px;background:var(--bg2);border:1px solid var(--line);font-size:13.5px"><b style="color:' + color + '">' + html + "</div>";
   }
 
+  const tgLink = (name) => name ? '<br><a class="mini-btn" style="margin-top:10px;text-decoration:none" href="https://t.me/' + encodeURIComponent(name) + '" target="_blank" rel="noopener">Ouvrir @' + esc(name) + " dans Telegram</a>" : "";
+
   async function tgCheck() {
     const token = $("tgToken").value.trim();
     if (!/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(token)) return tgShow("err", "Jeton invalide.</b><br>Copie-le en entier depuis BotFather : il ressemble à 123456789:AAH….");
@@ -1049,8 +1053,9 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
       const sent = await tgCall(token, "sendMessage", { chat_id: chat.id, text: "✅ AlertesPro : ton bot Telegram fonctionne.\nUne fois le robot MT5 réglé, tes pré-alertes, signaux et résultats arriveront ici." });
       if (!sent.ok) return tgShow("err", "Message de test refusé.</b><br>Renvoie /start au bot @" + esc(name) + " puis réessaie.");
       store.set("tgChat", String(chat.id));
+      store.set("tgBot", name);
       tgShow("ok", "C'est bon ! Message de test envoyé à @" + esc(name) + ".</b><br>Ton chat id : <b class=\"num\">" + esc(chat.id) + '</b> <button class="mini-btn" data-copy="' + esc(chat.id) + '">Copier</button>' +
-        "<br>Dernière étape dans MT5 : <b>Telegram = true</b> et ce jeton dans <b>Telegram : token du bot</b>.");
+        "<br>Dernière étape dans MT5 : <b>Telegram = true</b> et ce jeton dans <b>Telegram : token du bot</b>." + tgLink(name));
     } catch (e) {
       tgShow("err", "Pas de connexion avec Telegram.</b><br>Vérifie ta connexion internet et réessaie.");
     } finally { btn.disabled = false; btn.textContent = "Vérifier et envoyer un test"; }
@@ -1084,6 +1089,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
   // ---------- Démarrage ----------
   $("code").value = S.code;
   $("tgToken").value = store.get("tgToken", "");
+  if (store.get("tgBot", "")) $("tgOut").innerHTML = '<div style="margin-top:12px;font-size:13.5px" class="muted">Bot vérifié : @' + esc(store.get("tgBot", "")) + tgLink(store.get("tgBot", "")) + "</div>";
   $("swSound").classList.toggle("on", S.sound);
   $("swNotif").classList.toggle("on", S.notif);
   const c = store.get("calc", null);
