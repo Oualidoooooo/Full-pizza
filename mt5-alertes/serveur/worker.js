@@ -603,79 +603,48 @@ async function deleteUser(env, id) {
 const SIDE = (side) => (side === "buy" ? "ACHAT" : "VENTE");
 
 function signalMsg(a, s, u, cur) {
-  const buy = a.side === "buy";
-  const dg = a.dg;
-  const L = [
-    (buy ? "🟢🟢 <b>ACHAT · " : "🔴🔴 <b>VENTE · ") + esc(a.sym) + "</b>" + (a.tf ? " (" + esc(a.tf) + ")" : ""),
-    SEP,
-    "💶 Entrée : <code>" + px(a.entry, dg) + "</code>",
-    "🛑 Stop Loss : <code>" + px(a.sl, dg) + "</code>" + (Number.isFinite(a.slp) ? " (" + fmt(a.slp, 1) + " pips)" : ""),
-  ];
-  const two = hasTp1(a);
-  const pip1 = Number.isFinite(a.slp) ? " (" + fmt(a.slp * a.r1, 1) + " pips)" : "";
-  if (two) L.push("🎯 TP1 (sûr) : <code>" + px(a.tp1, dg) + "</code>" + pip1, "🚀 TP2 : <code>" + px(a.tp, dg) + "</code>" + (Number.isFinite(a.tpp) ? " (" + fmt(a.tpp, 1) + " pips)" : ""));
-  else L.push("🎯 Take Profit : <code>" + px(a.tp, dg) + "</code>" + (Number.isFinite(a.tpp) ? " (" + fmt(a.tpp, 1) + " pips)" : ""));
-  const sp = s.ok && two ? splitLots(s.lot, a) : null;
-  if (s.ok && two) {
-    L.push("📦 Volume total : <code>" + s.lotTxt + "</code> lot", SEP,
-      "🔴 Si Stop Loss : <b>" + money(-s.risk, cur) + "</b> (" + fmtShort(s.risk / u.capital * 100) + " % de ton capital)");
-    if (sp) L.push("🟡 Si TP1 puis retour : <b>" + money(s.risk * sp.f1 * a.r1, cur) + "</b> (tu restes gagnant)",
-      "🟢 Si TP1 + TP2 : <b>" + money(s.risk * (sp.f1 * a.r1 + (1 - sp.f1) * r2Of(a)), cur) + "</b>");
-    else L.push("🟢 Si TP1 : <b>" + money(s.risk * a.r1, cur) + "</b>", "ℹ️ Volume trop petit pour couper en deux : vise seulement TP1 (le plus sûr).");
-    if (s.marginCapped) L.push("🛡️ Volume réduit pour ne pas bloquer trop de marge");
-  } else if (s.ok) {
-    L.push("📦 Volume : <code>" + s.lotTxt + "</code> lot", SEP,
-      "🔴 Si Stop Loss : <b>" + money(-s.risk, cur) + "</b> (" + fmtShort(s.risk / u.capital * 100) + " % de ton capital)",
-      "🟢 Si Take Profit : <b>" + money(s.gain, cur) + "</b>");
-    if (s.marginCapped) L.push("🛡️ Volume réduit pour ne pas bloquer trop de marge");
-  } else if (s.reason === "data") {
-    L.push(SEP, "⚠️ Volume impossible à calculer pour ce marché : <b>passe ton tour</b>.");
-  } else {
-    L.push(SEP, "⛔ <b>Passe ton tour</b> : avec " + money(u.capital, cur, false) + ", même le plus petit volume (" + px(a.vmin || 0.01, stepDecimals(a.vstep > 0 ? a.vstep : 0.01)) + " lot) " +
-      (s.reason === "margin" ? "bloquerait trop de marge." : "risquerait " + money(s.minRisk || 0, cur, false) + ", c'est trop pour ton compte."),
-      "💡 Il faudrait environ " + money(s.minCapital || 0, cur, false) + " de capital pour ce trade.");
+  const buy = a.side === "buy", dg = a.dg, two = hasTp1(a);
+  const L = [(buy ? "🟢 <b>ACHÈTE " : "🔴 <b>VENDS ") + esc(a.sym) + "</b>", SEP];
+  if (!s.ok) {
+    L.push("⛔ <b>PASSE TON TOUR</b>",
+      s.reason === "data" ? "Volume impossible à calculer pour ce marché."
+        : "Ton capital est trop petit pour ce marché" + (s.minCapital ? " (il faudrait environ <b>" + money(s.minCapital, cur, false) + "</b>)." : "."));
+    return L.join("\n");
   }
-  L.push(SEP, "⏱ À prendre avant <b>" + hhmm(a.vu) + "</b>");
-  if (Number.isFinite(a.lim)) L.push("⚠️ Trop tard si le prix est " + (buy ? "au-dessus de " : "en dessous de ") + "<code>" + px(a.lim, dg) + "</code>");
-  const act = "<b>" + (buy ? "BUY (acheter)" : "SELL (vendre)") + "</b>";
-  if (sp) L.push("", "📲 <b>Dans MT5, ouvre 2 ordres</b> :",
-    "1️⃣ Volume <b>" + sp.halfTxt + "</b> › SL <b>" + px(a.sl, dg) + "</b> › TP <b>" + px(a.tp1, dg) + "</b> › " + act,
-    "2️⃣ Volume <b>" + sp.restTxt + "</b> › SL <b>" + px(a.sl, dg) + "</b> › TP <b>" + px(a.tp, dg) + "</b> › " + act,
-    "👉 Quand TP1 est touché, je te préviens : mets le SL de l'ordre 2 au prix d'entrée.");
-  else if (s.ok && two) L.push("", "📲 <b>Dans MT5</b> : " + esc(a.sym) + " › Nouvel ordre › Volume <b>" + s.lotTxt + "</b> › SL <b>" + px(a.sl, dg) + "</b> › TP <b>" + px(a.tp1, dg) + "</b> › " + act);
-  else if (s.ok) L.push("", "📲 <b>Dans MT5</b> : " + esc(a.sym) + " › Nouvel ordre › Volume <b>" + s.lotTxt + "</b> › SL <b>" + px(a.sl, dg) + "</b> › TP <b>" + px(a.tp, dg) + "</b> › " + act);
-  if (a.rs) L.push("", "📊 <i>" + esc(String(a.rs).slice(0, 300)) + "</i>");
-  if (a.news) L.push("📰 Annonce économique proche : " + esc(String(a.news).slice(0, 100)));
+  const sp = two ? splitLots(s.lot, a) : null;
+  L.push("Prix d'entrée : <b>" + px(a.entry, dg) + "</b>",
+    "Stop Loss : <b>" + px(a.sl, dg) + "</b>");
+  if (sp) L.push("TP1 : <b>" + px(a.tp1, dg) + "</b>", "TP2 : <b>" + px(a.tp, dg) + "</b>");
+  else L.push("Take Profit : <b>" + px(two ? a.tp1 : a.tp, dg) + "</b>");
+  L.push("Volume : <b>" + (sp ? sp.halfTxt + " + " + sp.restTxt : s.lotTxt) + " lot</b>", "");
+  const gain = sp ? s.risk * (sp.f1 * a.r1 + (1 - sp.f1) * r2Of(a)) : two ? s.risk * a.r1 : s.gain;
+  L.push("💸 Tu risques : <b>" + money(-s.risk, cur) + "</b>", "💰 Tu peux gagner : <b>" + money(gain, cur) + "</b>", "",
+    "⏱ À prendre avant <b>" + hhmm(a.vu) + "</b>", SEP);
+  const act = buy ? "BUY" : "SELL";
+  if (sp) L.push("📲 <b>Ouvre 2 ordres " + act + "</b> (SL " + px(a.sl, dg) + ") :",
+    "① <b>" + sp.halfTxt + " lot</b> → TP <b>" + px(a.tp1, dg) + "</b>",
+    "② <b>" + sp.restTxt + " lot</b> → TP <b>" + px(a.tp, dg) + "</b>");
+  else L.push("📲 <b>Ouvre 1 ordre " + act + "</b> : <b>" + s.lotTxt + " lot</b>, SL " + px(a.sl, dg) + ", TP <b>" + px(two ? a.tp1 : a.tp, dg) + "</b>");
   return L.join("\n");
 }
 
 function preMsg(a, s, cur) {
-  const left = Number.isFinite(a.at) ? a.at - now() : 0;
-  const L = ["🟡 <b>PRÉPARE-TOI · " + esc(a.sym) + "</b>", SEP,
-    "⏳ " + (a.side === "buy" ? "🟢 ACHAT" : "🔴 VENTE") + " possible à <b>" + hhmm(a.at) + "</b>" + (left > 5 ? " (dans " + (left >= 90 ? Math.round(left / 60) + " min" : left + " s") + ")" : ""),
-    "📱 Ouvre MT5 sur " + esc(a.sym) + " maintenant"];
-  if (s && s.ok) L.push("📦 Volume prévu : environ <b>" + s.lotTxt + "</b> lot (risque ≈ " + money(-s.risk, cur) + ")");
-  L.push("✋ N'entre pas avant le signal : il peut encore s'annuler");
-  return L.join("\n");
+  return ["🟡 <b>PRÉPARE-TOI · " + esc(a.sym) + "</b>", SEP,
+    (a.side === "buy" ? "🟢 <b>ACHAT</b>" : "🔴 <b>VENTE</b>") + " possible à <b>" + hhmm(a.at) + "</b>",
+    "Ouvre MT5 maintenant.", "✋ <b>N'entre pas encore</b>, attends le signal."].join("\n");
 }
 
 function statsLine(st, cur) {
-  return "📊 Ton bilan : ✅ " + st.wins + " gagné" + (st.wins > 1 ? "s" : "") + " · ❌ " + st.losses + " perdu" + (st.losses > 1 ? "s" : "") + " · <b>" + money(st.money, cur) + "</b>";
+  return "📊 Ton total : <b>" + money(st.money, cur) + "</b> (" + st.wins + " gagné" + (st.wins > 1 ? "s" : "") + ", " + st.losses + " perdu" + (st.losses > 1 ? "s" : "") + ")";
 }
 
 function resultMsg(ev, d, st, cur) {
-  const head = ev.res === "tp" ? (ev.t1 || ev.r1 ? "🚀 <b>TP2 TOUCHÉ · " : "✅ <b>TAKE PROFIT · ") : ev.res === "sl" ? "❌ <b>STOP LOSS · " : ev.res === "be" ? "🟡 <b>RETOUR AU PRIX D'ENTRÉE · " : "⌛ <b>FIN DU TRADE · ";
-  const L = [head + esc(ev.sym) + "</b>", SEP];
-  if (d.lot > 0) {
-    const rr = d.risk > 0 ? d.money / d.risk : 0;
-    L.push((d.money >= 0 ? "💰 Résultat total : <b>" : "💸 Résultat : <b>") + money(d.money, cur) + "</b> (" + (rr > 0 ? "+" : "") + fmt(rr, 2) + " R)");
-    if (ev.res === "be") L.push("👍 La 2e moitié est sortie sans perte : tu gardes le gain de TP1.");
-    if (ev.res !== "tp" && ev.res !== "sl" && ev.res !== "be") L.push("👉 Le trade a duré trop longtemps : ferme-le dans MT5 si ce n'est pas déjà fait.");
-  } else {
-    L.push("ℹ️ Tu n'avais pas pris ce trade (protection de ton compte).");
-  }
-  L.push("↔️ " + SIDE(ev.side) + " à " + px(ev.entry, ev.dg) + " → sortie " + px(ev.exit, ev.dg), SEP, statsLine(st, cur));
-  if (d.lot > 0) L.push("📅 Aujourd'hui : <b>" + money(st.today, cur) + "</b>");
+  if (!(d.lot > 0)) return "ℹ️ " + esc(ev.sym) + " : le trade que tu as passé est terminé.";
+  const head = ev.res === "tp" ? "🚀 <b>GAGNÉ · " : ev.res === "sl" ? "❌ <b>PERDU · " : ev.res === "be" ? "🟡 <b>TERMINÉ · " : "⌛ <b>TERMINÉ · ";
+  const L = [head + esc(ev.sym) + "</b>", SEP, "<b>" + money(d.money, cur) + "</b>"];
+  if (ev.res === "be") L.push("Le reste est sorti à 0 : tu gardes le gain de TP1 👍");
+  if (ev.res !== "tp" && ev.res !== "sl" && ev.res !== "be") L.push("👉 Ferme ce trade dans MT5 s'il est encore ouvert.");
+  L.push("", statsLine(st, cur));
   return L.join("\n");
 }
 
@@ -828,7 +797,7 @@ async function onSignal(env, ev) {
     if (u.paused || u.stopped_until > t || !wantsMarket(u, ev.sym)) continue;
     if ((open.get(u.id) || 0) >= MAX_OPEN) {
       stmts.push(env.DB.prepare("INSERT INTO deliveries (user_id, alert_id, sid, kind, sym, note, created) VALUES (?, ?, ?, 'signal', ?, 'max_open', ?)").bind(u.id, alertId, ev.sid, ev.sym, t));
-      outbox.push([u.tg_chat, "ℹ️ Signal " + esc(ev.sym) + " pas envoyé : tu as déjà " + MAX_OPEN + " trades en cours.\n🛡️ C'est une protection pour ton compte."]);
+      outbox.push([u.tg_chat, "ℹ️ Signal " + esc(ev.sym) + " pas envoyé : tu as déjà <b>" + MAX_OPEN + " trades en cours</b>."]);
       continue;
     }
     const s = sizeTrade(u, tradeOf(ev));
@@ -868,7 +837,7 @@ async function onCancel(env, ev) {
     .bind(ev.sym, t - 900).all()).results || [];
   const stmts = rows.map((u) => env.DB.prepare("INSERT INTO deliveries (user_id, alert_id, kind, sym, created) VALUES (?, ?, 'cancel', ?, ?)").bind(u.id, alertId, ev.sym, t));
   if (stmts.length) await env.DB.batch(stmts);
-  const text = "⚪ <b>ANNULÉ · " + esc(ev.sym) + "</b>\nLes conditions ne sont plus réunies.\n👉 <b>Ne fais rien</b> sur " + esc(ev.sym) + ".";
+  const text = "⚪ <b>ANNULÉ · " + esc(ev.sym) + "</b>\n👉 <b>Ne fais rien.</b>";
   return { result: { users: rows.length }, outbox: rows.map((u) => [u.tg_chat, text]) };
 }
 
@@ -904,10 +873,7 @@ async function onResult(env, ev) {
     // stop du jour : -3 % du capital
     if (d.lot > 0 && d.money < 0 && d.stopped_until <= t && st.today <= -dailyStopMoney({ capital: d.capital, risk_pct: d.risk_pct }) + 0.005 && !stops.includes(d.user_id)) {
       stops.push(d.user_id);
-      text += "\n\n" + ["🛑 <b>STOP POUR AUJOURD'HUI</b>", SEP,
-        "Tu as perdu " + money(-st.today, cur, false) + " aujourd'hui.",
-        "Plus de signaux jusqu'à demain : c'est ce qui protège ton compte.",
-        "Les trades en cours continuent jusqu'à leur Stop Loss ou Take Profit."].join("\n");
+      text += "\n\n🛑 <b>STOP POUR AUJOURD'HUI</b>\nTu as perdu <b>" + money(-st.today, cur, false) + "</b> aujourd'hui. Plus de signaux jusqu'à demain.";
     }
     outbox.push([d.tg_chat, text]);
   }
@@ -931,13 +897,13 @@ async function onTp1(env, ev) {
     if (sp) {
       const g1 = round2(d.risk * sp.f1 * a.r1);
       stmts.push(env.DB.prepare("UPDATE deliveries SET note = ? WHERE id = ?").bind((d.note || "") + ";tp1", d.id));
-      outbox.push([d.tg_chat, head + "💰 Ordre 1 (" + sp.halfTxt + " lot) fermé à " + px(a.tp1, a.dg) + " : <b>" + money(g1, cur) + "</b>\n" +
-        "👉 <b>Maintenant</b> : mets le Stop Loss de l'ordre 2 à <code>" + px(a.entry, a.dg) + "</code> (ton prix d'entrée).\n" +
-        "🛡️ Ensuite, plus aucun risque : l'ordre 2 vise TP2 à " + px(a.tp, a.dg) + "."]);
+      outbox.push([d.tg_chat, head + "<b>" + money(g1, cur) + "</b> encaissés ✅\n\n" +
+        "👉 Mets le Stop Loss de l'ordre ② à <b>" + px(a.entry, a.dg) + "</b>\n" +
+        "Tu ne peux plus perdre sur ce trade 🛡️"]);
     } else {
       const g = round2(d.risk * a.r1);
       stmts.push(env.DB.prepare("UPDATE deliveries SET result = 'tp1', r = ?, money = ?, closed = ? WHERE id = ?").bind(a.r1, g, t, d.id));
-      outbox.push([d.tg_chat, head + "✅ Ton trade est fermé à TP1 : <b>" + money(g, cur) + "</b> 🎉"]);
+      outbox.push([d.tg_chat, head + "<b>" + money(g, cur) + "</b> ✅ Trade terminé 🎉"]);
     }
   }
   if (stmts.length) await env.DB.batch(stmts);
