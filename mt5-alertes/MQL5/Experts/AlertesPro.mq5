@@ -26,7 +26,7 @@ input string InpSoundFile    = "alert.wav";   // Fichier son (dossier Sounds de 
 input bool   InpPush         = true;          // Notification push (appli MT5 mobile)
 input bool   InpEmail        = false;         // E-mail (à configurer dans Outils > Options)
 input bool   InpTelegram     = false;         // Telegram
-input string InpTgToken      = "";            // Telegram : token du bot
+input string InpTgToken      = "";            // Telegram : token du bot (sert aussi à brancher le serveur)
 input string InpTgChatId     = "";            // Telegram : chat id (laisse vide : il est trouvé tout seul)
 input bool   InpTestAtStart  = true;          // Envoyer un message de test au démarrage
 input bool   InpServer       = false;         // Serveur AlertesPro (comptes + Telegram pour toute la famille)
@@ -770,6 +770,24 @@ void ServerResult(const Track &t, const string res, const double r, const double
    ServerSend("{" + JS("type", "result") + "," + JS("eid", "r:" + t.sid) + "," + JS("sid", t.sid) + "," + JS("sym", t.sym) + "," +
               JS("side", t.buy ? "buy" : "sell") + "," + JS("res", res) + "," + JN("r", r, 4) + "," +
               JN("entry", t.entry, dg) + "," + JN("exit", exitPx, dg) + "," + JI("dg", dg) + "," + JS("cur", MoneyCur()) + "}");
+  }
+
+//--- au démarrage : donne le jeton du bot au serveur (s'il ne l'a pas déjà)
+void ServerClaim()
+  {
+   if(!ServerOn() || InpTgToken == "")
+      return;
+   char post[], result[];
+   string resHeaders;
+   string body = "{" + JS("token", InpTgToken) + "}";
+   int len = StringToCharArray(body, post, 0, WHOLE_ARRAY, CP_UTF8);
+   if(len > 0)
+      ArrayResize(post, len - 1);
+   int code = WebRequest("POST", ServerBase() + "/robot/claim", "Content-Type: application/json\r\n", 5000, post, result, resHeaders);
+   if(code == 200)
+      Print("Serveur AlertesPro : bot Telegram relié au serveur.");
+   else if(code != -1)
+      Print("Serveur : jeton du bot refusé (", code, ") ", CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8));
   }
 
 //--- état des marchés (toutes les 5 minutes) : tendance, prix, taille moyenne du stop
@@ -1897,6 +1915,7 @@ int OnInit()
    //--- rattrape les signaux conclus pendant que MT5 était fermé
    if(InpTrack)
       CatchUpTracks();
+   ServerClaim();
    CheckServer();
    return INIT_SUCCEEDED;
   }

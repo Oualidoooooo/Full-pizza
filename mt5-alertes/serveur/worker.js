@@ -45,6 +45,7 @@ const SCHEMA = [
 ].join("\n");
 
 let schemaReady = false;
+let savedToken = "";
 let hookReady = false;
 
 // =====================================================================
@@ -144,6 +145,28 @@ function parisDayStart(ts) {
 const nextParisMidnight = (ts) => parisDayStart(ts) + 86400;
 
 // ------------------------------------------------------------ base de données
+// Jeton du bot : secret Cloudflare TG_TOKEN, sinon celui envoyé une fois par le robot MT5
+async function withToken(env) {
+  if (env.TG_TOKEN) return env;
+  if (!savedToken) {
+    const row = await env.DB.prepare("SELECT v FROM kv WHERE k = 'tgtoken'").first();
+    if (row) { try { savedToken = JSON.parse(row.v).token || ""; } catch (e) {} }
+  }
+  return savedToken ? Object.assign(Object.create(env), { TG_TOKEN: savedToken }) : env;
+}
+
+async function claimToken(env, body) {
+  const token = String(body.token || "").trim();
+  if (!/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(token)) return fail(400, "Jeton invalide.");
+  if (env.TG_TOKEN) return sameText(token, env.TG_TOKEN) ? json({ ok: true, already: true }) : fail(403, "Un autre jeton est déjà enregistré.");
+  const me = await tg(Object.assign(Object.create(env), { TG_TOKEN: token }), "getMe", {});
+  if (!me.ok) return fail(400, "Telegram refuse ce jeton.");
+  await kvSet(env, "tgtoken", { token });
+  savedToken = token;
+  hookReady = false;
+  return json({ ok: true, bot: me.result.username });
+}
+
 async function ensureSchema(env) {
   if (schemaReady) return;
   if (!env.DB) throw new Error("Base D1 non reliée (liaison « DB » manquante)");
@@ -886,6 +909,7 @@ function marketOpen(ts) {
 
 async function cron(env) {
   await ensureSchema(env);
+  env = await withToken(env);
   const t = now();
   await env.DB.prepare("DELETE FROM sessions WHERE expires < ?").bind(t).run();
   const rs = await robotStatus(env);
@@ -929,6 +953,8 @@ async function handle(req, env, ctx) {
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const method = req.method;
   await ensureSchema(env);
+  if (path === "/robot/claim" && method === "POST") return claimToken(await withToken(env), await readJson(req));
+  env = await withToken(env);
   ctx.waitUntil(ensureWebhook(env, url.origin).catch((e) => console.log("webhook", e && e.stack || e)));
   const later = (outbox) => { if (outbox && outbox.length) ctx.waitUntil(sendAll(env, outbox).catch((e) => console.log("send", e && e.stack || e))); };
 
