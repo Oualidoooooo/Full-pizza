@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AlertesPro</title>
-<meta name="description" content="Tableau de bord des alertes de trading MetaTrader 5">
+<meta name="description" content="Les alertes de trading de ton robot MT5, calculées pour ton argent.">
 <meta name="theme-color" content="#0a0e16">
 <meta name="color-scheme" content="dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -16,17 +16,18 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0a0e16; --bg2:#0e1420; --card:#121a29; --card2:#172134; --card3:#1d2940;
-  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.12);
-  --text:#e9eef7; --muted:#8b97ad; --dim:#5f6b82;
-  --buy:#1fd197; --buy-bg:rgba(31,209,151,.12);
-  --sell:#ff5a6e; --sell-bg:rgba(255,90,110,.12);
-  --accent:#7b8cff; --accent2:#a77bff; --accent-bg:rgba(123,140,255,.13);
-  --gold:#f5b94a; --gold-bg:rgba(245,185,74,.13);
-  --radius:18px; --radius-s:12px;
+  --bg:#0a0e16; --card:#121a29; --card2:#172134; --card3:#1d2940;
+  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.13);
+  --text:#e9eef7; --muted:#93a0b8; --dim:#66728a;
+  --buy:#1fd197; --buy-bg:rgba(31,209,151,.13);
+  --sell:#ff5a6e; --sell-bg:rgba(255,90,110,.13);
+  --accent:#7b8cff; --accent2:#a77bff; --accent-bg:rgba(123,140,255,.14);
+  --gold:#f5b94a; --gold-bg:rgba(245,185,74,.14);
+  --blue:#4fb3ff; --blue-bg:rgba(79,179,255,.13);
+  --radius:20px;
   --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px);
 }
@@ -35,1079 +36,815 @@
 html,body{background:var(--bg);color:var(--text)}
 body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.45;
   -webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden;
-  background:
-    radial-gradient(900px 500px at 85% -10%,rgba(123,140,255,.16),transparent 60%),
-    radial-gradient(700px 420px at -10% 10%,rgba(167,123,255,.10),transparent 60%),
-    var(--bg);
+  background:radial-gradient(900px 500px at 85% -10%,rgba(123,140,255,.17),transparent 60%),
+    radial-gradient(700px 420px at -10% 10%,rgba(167,123,255,.10),transparent 60%),var(--bg);
   background-attachment:fixed}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 input{font:inherit;color:inherit}
+a{color:var(--accent)}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-.app{max-width:620px;margin:0 auto;padding:calc(12px + var(--safe-t)) 16px calc(96px + var(--safe-b))}
+.app{max-width:600px;margin:0 auto;padding:calc(12px + var(--safe-t)) 16px calc(100px + var(--safe-b))}
+.app.solo{padding-bottom:calc(30px + var(--safe-b))}
+.muted{color:var(--muted)} .dim{color:var(--dim)} .green{color:var(--buy)} .red{color:var(--sell)} .gold{color:var(--gold)}
+.small{font-size:13px} .center{text-align:center}
+.stack>*+*{margin-top:14px}
 
-/* En-tête */
-.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0 18px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0 16px}
 .brand{display:flex;align-items:center;gap:10px}
-.logo{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;
+.logo{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:none;
   background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 8px 24px rgba(123,140,255,.35)}
 .logo svg{width:22px;height:22px}
-.brand h1{font-size:19px;font-weight:800;letter-spacing:-.02em}
-.brand small{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-top:-2px}
-.conn{display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;background:var(--card);
+.brand b{font-size:19px;font-weight:800;letter-spacing:-.02em}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;background:var(--card);
   border:1px solid var(--line);font-size:12.5px;font-weight:600;color:var(--muted);white-space:nowrap}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
-.conn.live .dot{background:var(--buy);box-shadow:0 0 0 0 rgba(31,209,151,.6);animation:pulse 2s infinite}
-.conn.live{color:var(--text)}
-.conn.demo .dot{background:var(--gold)}
-.conn.off .dot{background:var(--sell)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim);flex:none}
+.chip.on{color:var(--text)} .chip.on .dot{background:var(--buy);animation:pulse 2s infinite}
+.chip.off .dot{background:var(--sell)} .chip.demo .dot{background:var(--gold)}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,209,151,.55)}70%{box-shadow:0 0 0 8px rgba(31,209,151,0)}100%{box-shadow:0 0 0 0 rgba(31,209,151,0)}}
 
-/* Cartes */
 .card{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:var(--radius);padding:16px}
-.stack>*+*{margin-top:14px}
-.sec-title{display:flex;align-items:center;justify-content:space-between;margin:22px 2px 10px}
-.sec-title h2{font-size:15px;font-weight:700;letter-spacing:-.01em}
-.sec-title a,.sec-title button{font-size:13px;color:var(--accent);font-weight:600}
-.muted{color:var(--muted)} .dim{color:var(--dim)}
-.up{color:var(--buy)} .down{color:var(--sell)}
+.card h3{font-size:16px;font-weight:700;letter-spacing:-.01em;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.sec{display:flex;align-items:center;justify-content:space-between;margin:24px 2px 10px}
+.sec h2{font-size:15px;font-weight:700}
+.sec button{font-size:13px;color:var(--accent);font-weight:600}
+.hello{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:2px 2px 14px}
+.hello small{display:block;font-size:14px;font-weight:500;color:var(--muted);margin-top:2px;letter-spacing:0}
+.tone-red{background:linear-gradient(160deg,rgba(255,90,110,.16),var(--card) 70%);border-color:rgba(255,90,110,.35)}
+.tone-gold{background:linear-gradient(160deg,rgba(245,185,74,.16),var(--card) 70%);border-color:rgba(245,185,74,.35)}
+.tone-blue{background:linear-gradient(160deg,rgba(79,179,255,.16),var(--card) 70%);border-color:rgba(79,179,255,.35)}
+.tone-violet{background:linear-gradient(160deg,rgba(123,140,255,.20),var(--card) 70%);border-color:rgba(123,140,255,.4)}
 
-/* Compte */
-.hero{position:relative;overflow:hidden;padding:20px;border-radius:22px;
-  background:linear-gradient(140deg,#1f2b4d 0%,#182038 45%,#121a29 100%);border:1px solid var(--line2)}
-.hero:after{content:"";position:absolute;right:-60px;top:-60px;width:220px;height:220px;border-radius:50%;
-  background:radial-gradient(circle,rgba(167,123,255,.35),transparent 70%)}
-.hero .lbl{font-size:12.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
-.hero .big{font-size:34px;font-weight:700;margin:4px 0 2px;letter-spacing:-.03em}
-.hero .day{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;padding:4px 10px;border-radius:999px;margin-top:6px}
-.hero .day.up{background:var(--buy-bg)} .hero .day.down{background:var(--sell-bg)}
-.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:18px;position:relative;z-index:1}
-.kpi{background:rgba(10,14,22,.35);border:1px solid var(--line);border-radius:var(--radius-s);padding:10px}
-.kpi span{display:block;font-size:11.5px;color:var(--muted);font-weight:600}
-.kpi b{font-size:15px;font-weight:600}
-.updated{font-size:12px;color:var(--muted);margin-top:12px;position:relative;z-index:1}
-
-/* Signaux */
-.sig{position:relative;padding:16px;border-radius:var(--radius);border:1px solid var(--line);
-  background:linear-gradient(180deg,var(--card2),var(--card))}
-.sig.buy{box-shadow:inset 3px 0 0 var(--buy)} .sig.sell{box-shadow:inset 3px 0 0 var(--sell)}
-.sig-head{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap}
-.badge{font-size:12px;font-weight:800;letter-spacing:.06em;padding:5px 9px;border-radius:8px}
-.badge.buy{background:var(--buy-bg);color:var(--buy)} .badge.sell{background:var(--sell-bg);color:var(--sell)}
-.sig-sym{font-size:18px;font-weight:800;letter-spacing:-.02em}
-.tf{font-size:12px;color:var(--muted);border:1px solid var(--line2);padding:2px 7px;border-radius:6px;font-weight:600}
-.ago{margin-left:auto;font-size:12.5px;color:var(--muted);white-space:nowrap}
-.new{font-size:11px;font-weight:700;color:#0a0e16;background:var(--gold);padding:2px 7px;border-radius:999px;margin-left:6px}
-.reason{font-size:13.5px;color:var(--muted);margin:8px 0 14px}
-.levels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.lv{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;text-align:left;width:100%}
-.lv span{display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:.04em}
-.lv b{display:block;font-size:14.5px;margin-top:2px;overflow:hidden;text-overflow:ellipsis}
-.lv i{font-style:normal;font-size:11.5px;color:var(--dim)}
-.lv.sl b{color:var(--sell)} .lv.tp b{color:var(--buy)}
-.lv:active{transform:scale(.98)}
-.copy-hint{font-size:11.5px;color:var(--dim);margin-top:8px}
-.rr{margin:14px 0 6px;position:relative;height:10px;display:flex;border-radius:999px;overflow:visible}
-.rr .r{background:linear-gradient(90deg,#ff5a6e,#ff8a7a);border-radius:999px 0 0 999px}
-.rr .g{background:linear-gradient(90deg,#4fe0b1,#1fd197);border-radius:0 999px 999px 0}
-.rr .mark{position:absolute;top:-5px;width:4px;height:20px;border-radius:3px;background:#fff;box-shadow:0 0 0 3px rgba(10,14,22,.8);transform:translateX(-2px)}
-.rr-lbl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--dim);font-weight:600}
-.sig-foot{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
-.chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:6px 10px;border-radius:999px;background:var(--bg2);border:1px solid var(--line)}
-.chip.warn{background:var(--gold-bg);color:var(--gold);border-color:transparent}
-.chip.ok{background:var(--buy-bg);color:var(--buy);border-color:transparent}
-
-/* Marchés */
-.mk-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.mk{padding:14px;border-radius:var(--radius);background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line)}
-.mk-top{display:flex;align-items:center;justify-content:space-between}
-.mk-sym{font-weight:800;font-size:15.5px;letter-spacing:-.01em}
-.trend{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:3px 8px;border-radius:999px}
-.trend.up{background:var(--buy-bg)} .trend.down{background:var(--sell-bg)}
-.trend.flat{background:var(--card3);color:var(--muted)}
-.mk-px{font-size:19px;font-weight:600;margin:8px 0 10px}
-.gauge{position:relative;height:6px;border-radius:999px;background:linear-gradient(90deg,var(--buy) 0 30%,var(--card3) 30% 70%,var(--sell) 70% 100%);opacity:.9}
-.gauge i{position:absolute;top:-4px;width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid var(--bg);transform:translateX(-7px)}
-.mk-meta{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 8px;font-size:12px;color:var(--muted);margin-top:9px;font-weight:500}
-.mk-meta span{white-space:nowrap}
-.newsflag{display:inline-flex;align-items:center;gap:4px;color:var(--gold);font-weight:700}
-
-/* Flux d'alertes */
-.filters{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 12px;margin:0 -2px;scrollbar-width:none}
-.filters::-webkit-scrollbar{display:none}
-.filters button{flex:none;font-size:13px;font-weight:600;padding:8px 13px;border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--muted)}
-.filters button.on{background:var(--text);color:var(--bg);border-color:var(--text)}
-.feed{display:flex;flex-direction:column;gap:8px}
-.it{display:flex;gap:12px;padding:13px;border-radius:var(--radius-s);background:var(--card);border:1px solid var(--line)}
-.ic{flex:none;width:36px;height:36px;border-radius:11px;display:grid;place-items:center}
-.ic svg{width:18px;height:18px}
-.ic.signal{background:var(--accent-bg);color:var(--accent)}
-.ic.news{background:var(--gold-bg);color:var(--gold)}
-.ic.trade{background:var(--buy-bg);color:var(--buy)}
-.ic.trade.loss{background:var(--sell-bg);color:var(--sell)}
-.ic.account{background:var(--sell-bg);color:var(--sell)}
-.ic.line,.ic.market{background:rgba(94,200,255,.12);color:#5ec8ff}
-.ic.summary,.ic.info{background:var(--card3);color:var(--muted)}
-.ic.result{background:var(--buy-bg);color:var(--buy)}
-.ic.result.loss{background:var(--sell-bg);color:var(--sell)}
-.ic.pre{background:var(--gold-bg);color:var(--gold)}
-.pre-card{display:flex;gap:12px;align-items:flex-start;padding:15px;border-radius:var(--radius);background:var(--gold-bg);border:1px solid rgba(245,185,74,.4);margin-bottom:14px;animation:glow 1.4s ease-in-out infinite alternate}
-.pre-card svg{flex:none;width:28px;height:28px;color:var(--gold)}
-.pre-card b{display:block;color:var(--gold);font-size:16px;font-weight:800}
-.pre-card p{font-size:13.5px;margin-top:3px}
-@keyframes glow{from{box-shadow:0 0 0 0 rgba(245,185,74,0)}to{box-shadow:0 0 0 5px rgba(245,185,74,.16)}}
-.how{margin-top:12px;border-top:1px solid var(--line);padding-top:11px}
-.how summary{cursor:pointer;font-size:13.5px;font-weight:700;color:var(--accent);list-style:none}
-.how summary::-webkit-details-marker{display:none}
-.how summary:before{content:"▸ "}.how[open] summary:before{content:"▾ "}
-.how .steps{margin-top:12px}
-.how .steps li{color:var(--text)}
-.it-body{min-width:0;flex:1}
-.it-title{font-weight:600;font-size:14px;display:flex;justify-content:space-between;gap:10px}
-.it-title time{flex:none;font-weight:500;font-size:12px;color:var(--dim)}
-.it-text{font-size:13px;color:var(--muted);margin-top:3px;white-space:pre-line;word-wrap:break-word}
-
-/* Positions */
-.pos{display:flex;align-items:center;gap:12px;padding:12px 14px}
-.pos+.pos{border-top:1px solid var(--line)}
-.pos .s{font-weight:700} .pos .v{font-size:12.5px;color:var(--muted)}
-.pos .pl{margin-left:auto;text-align:right;font-weight:600}
-.nosl{font-size:11px;font-weight:700;color:var(--gold)}
-
-/* Vide */
-.empty{text-align:center;padding:34px 20px;color:var(--muted)}
-.empty svg{width:42px;height:42px;color:var(--dim);margin-bottom:10px}
-.empty b{display:block;color:var(--text);font-size:15px;margin-bottom:4px}
-
-/* Formulaires */
-.field{display:block;margin-top:12px}
-.field span{display:block;font-size:12.5px;color:var(--muted);font-weight:600;margin-bottom:6px}
-.input{width:100%;padding:12px 13px;border-radius:var(--radius-s);background:var(--bg2);border:1px solid var(--line2);outline:none;font-size:15px}
-.input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
-.row{display:flex;gap:8px}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px;border-radius:var(--radius-s);font-weight:700;font-size:14.5px;background:var(--card3);border:1px solid var(--line2);white-space:nowrap}
-.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;color:#fff;box-shadow:0 8px 22px rgba(123,140,255,.3)}
-.btn.block{width:100%}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px 18px;border-radius:15px;
+  font-weight:700;font-size:16px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;
+  box-shadow:0 10px 26px rgba(123,140,255,.32);text-decoration:none;transition:transform .1s}
 .btn:active{transform:scale(.98)}
-.toggle{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 0}
-.toggle+.toggle{border-top:1px solid var(--line)}
-.toggle b{font-weight:600;font-size:14.5px} .toggle small{display:block;color:var(--muted);font-size:12.5px}
-.sw{position:relative;flex:none;width:46px;height:28px;border-radius:999px;background:var(--card3);border:1px solid var(--line2);transition:.2s}
-.sw:after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}
-.sw.on{background:var(--buy);border-color:var(--buy)} .sw.on:after{left:21px}
-.steps{counter-reset:s;list-style:none}
-.steps li{counter-increment:s;position:relative;padding:0 0 12px 36px;font-size:14px;color:var(--muted)}
-.steps li b{color:var(--text)}
-.steps li:before{content:counter(s);position:absolute;left:0;top:-1px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
-  font-size:12px;font-weight:700;background:var(--accent-bg);color:var(--accent)}
-code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 6px;border-radius:6px;color:var(--text);word-break:break-all}
-.calc-out{display:flex;align-items:baseline;justify-content:space-between;margin-top:14px;padding:14px;border-radius:var(--radius-s);background:var(--accent-bg)}
-.calc-out b{font-size:24px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
-.rules{display:grid;gap:8px}
-.rule{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;color:var(--muted)}
-.rule svg{flex:none;width:18px;height:18px;color:var(--buy);margin-top:1px}
+.btn.tg{background:linear-gradient(135deg,#2aa9e8,#2381d9);box-shadow:0 10px 26px rgba(42,169,232,.3)}
+.btn.green{background:linear-gradient(135deg,#1fd197,#16a878);box-shadow:0 10px 26px rgba(31,209,151,.25);color:#04261a}
+.btn.ghost{background:var(--card2);box-shadow:none;border:1px solid var(--line2);color:var(--text)}
+.btn.line{background:none;box-shadow:none;border:1px solid var(--line2);color:var(--muted);font-weight:600;font-size:15px}
+.btn.danger{background:none;box-shadow:none;border:1px solid rgba(255,90,110,.4);color:var(--sell);font-weight:600;font-size:15px}
+.btn.small{padding:10px 14px;font-size:14px;border-radius:12px;width:auto}
+.btn[disabled]{opacity:.55;pointer-events:none}
+.row{display:flex;gap:10px;align-items:center}
+.row>*{flex:1}
+.link{color:var(--accent);font-weight:600;font-size:14px;text-decoration:underline;text-underline-offset:3px}
 
-/* Navigation */
-.nav{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(12px + var(--safe-b));z-index:20;
-  width:min(588px,calc(100% - 24px));display:grid;grid-template-columns:repeat(5,1fr);padding:6px;
-  border-radius:22px;background:rgba(18,26,41,.82);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
-  border:1px solid var(--line2);box-shadow:0 18px 40px rgba(0,0,0,.45)}
-.nav button{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0 6px;border-radius:16px;font-size:11px;font-weight:600;color:var(--dim)}
-.nav button svg{width:22px;height:22px}
-.nav button.on{color:var(--text);background:var(--card3)}
-.nav .count{position:absolute;top:3px;right:calc(50% - 22px);min-width:17px;height:17px;padding:0 5px;border-radius:999px;background:var(--sell);color:#fff;font-size:10.5px;font-weight:700;display:grid;place-items:center}
-.view{display:none;animation:fade .25s ease}
-.view.on{display:block}
-@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.toast{position:fixed;left:50%;bottom:calc(100px + var(--safe-b));transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;
-  background:var(--text);color:var(--bg);font-weight:600;font-size:14px;padding:11px 16px;border-radius:12px;transition:.25s;z-index:30;max-width:calc(100% - 32px);text-align:center}
-.toast.show{opacity:1;transform:translateX(-50%)}
-.banner{display:flex;gap:12px;align-items:center;padding:14px;border-radius:var(--radius);background:var(--gold-bg);border:1px solid rgba(245,185,74,.25);margin-bottom:14px}
-.banner p{font-size:13.5px;flex:1} .banner b{color:var(--gold)}
-.disclaimer{font-size:12px;color:var(--dim);text-align:center;margin:26px 10px 0;line-height:1.5}
-/* Performance */
-.perf-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
-.perf-big{font-size:30px;font-weight:700;letter-spacing:-.03em}
-.perf-sub{font-size:12.5px;color:var(--muted);font-weight:600}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
-.stat{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 8px}
-.stat span{display:block;font-size:11px;color:var(--muted);font-weight:600}
-.stat b{font-size:15px;font-weight:600}
-.curve{display:block;width:100%;height:90px;margin-top:14px}
-.persym{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
-.perf-note{font-size:12px;color:var(--dim);margin-top:10px}
-/* Statut d'un signal */
-.res{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;padding:4px 9px;border-radius:999px}
-.res.tp{background:var(--buy-bg);color:var(--buy)}
-.res.sl{background:var(--sell-bg);color:var(--sell)}
-.res.exp{background:var(--card3);color:var(--muted)}
-.res.open{background:var(--accent-bg);color:var(--accent)}
-.sig.done{opacity:.82}
-.mini-btn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:6px 11px;border-radius:999px;background:var(--accent-bg);color:var(--accent)}
-/* Mini-graphique des marchés */
-.spark{display:block;width:100%;height:34px;margin:2px 0 8px}
-.mk-chg{font-size:12px;font-weight:700}
-/* Calculatrice */
-.select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
-  background-position:calc(100% - 18px) 52%,calc(100% - 13px) 52%;background-size:5px 5px;background-repeat:no-repeat;padding-right:34px}
-.quick{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-@media (max-width:380px){.levels{grid-template-columns:1fr}.mk-grid{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}}
+.welcome{padding:20px 4px 0;text-align:center}
+.welcome .logo{width:72px;height:72px;border-radius:22px;margin:10px auto 18px}
+.welcome .logo svg{width:40px;height:40px}
+.welcome h1{font-size:32px;font-weight:800;letter-spacing:-.03em}
+.welcome .lead{font-size:17px;color:var(--muted);margin:8px auto 22px;max-width:420px}
+.feats{text-align:left;margin:0 0 22px}
+.feat{display:flex;gap:14px;align-items:center;padding:14px;border-radius:16px;background:var(--card);border:1px solid var(--line)}
+.feat+.feat{margin-top:10px}
+.ic{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:23px;flex:none}
+.feat b{display:block;font-size:15.5px}
+.feat span{color:var(--muted);font-size:14px}
+.ic.gold{background:var(--gold-bg)} .ic.green{background:var(--buy-bg)} .ic.blue{background:var(--blue-bg)} .ic.red{background:var(--sell-bg)} .ic.grey{background:rgba(255,255,255,.07)}
+.welcome .btn+.btn{margin-top:10px}
+.note{font-size:13px;color:var(--muted);margin-top:16px;line-height:1.5}
+.warn{padding:12px 14px;border-radius:14px;background:var(--gold-bg);border:1px solid rgba(245,185,74,.35);color:#ffe2a6;font-size:14px;text-align:left}
+.err{padding:12px 14px;border-radius:14px;background:var(--sell-bg);border:1px solid rgba(255,90,110,.35);color:#ffc2ca;font-size:14px}
+.okmsg{padding:12px 14px;border-radius:14px;background:var(--buy-bg);border:1px solid rgba(31,209,151,.35);color:#b6f5df;font-size:14px}
+
+.form-head{display:flex;align-items:center;gap:10px;margin:4px 0 18px}
+.back{width:40px;height:40px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:22px;display:grid;place-items:center;flex:none}
+.form-head h1{font-size:23px;font-weight:800;letter-spacing:-.02em}
+.field{display:block;margin-bottom:14px}
+.field>span{display:block;font-size:14px;font-weight:600;margin:0 2px 6px}
+.field>small{display:block;font-size:12.5px;color:var(--muted);margin:6px 2px 0}
+.inp{display:flex;align-items:center;background:var(--card);border:1px solid var(--line2);border-radius:14px;transition:border-color .15s}
+.inp:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(123,140,255,.18)}
+.inp input{flex:1;min-width:0;background:none;border:0;outline:0;padding:14px;font-size:16px}
+.inp .suf{padding:0 14px;color:var(--muted);font-weight:600}
+.inp button{padding:0 14px;color:var(--muted);font-size:18px;align-self:stretch}
+.check{display:flex;gap:12px;align-items:flex-start;font-size:14px;color:var(--muted);margin:4px 2px 18px;cursor:pointer}
+.check input{width:22px;height:22px;accent-color:var(--accent);flex:none;margin-top:1px}
+
+.live{border-radius:22px;padding:16px;border:1px solid}
+.live.buy{background:linear-gradient(160deg,rgba(31,209,151,.22),#11201d 55%,var(--card));border-color:rgba(31,209,151,.45)}
+.live.sell{background:linear-gradient(160deg,rgba(255,90,110,.22),#22141a 55%,var(--card));border-color:rgba(255,90,110,.45)}
+.live.pre{background:linear-gradient(160deg,rgba(245,185,74,.22),#221c11 55%,var(--card));border-color:rgba(245,185,74,.45)}
+.live-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.live-top .sym{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.side{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-weight:800;font-size:14px;letter-spacing:.02em}
+.side.buy{background:var(--buy);color:#04261a} .side.sell{background:var(--sell);color:#2b0710} .side.pre{background:var(--gold);color:#2b1c02}
+.timer{margin-left:auto;font-size:13px;font-weight:700;padding:6px 10px;border-radius:999px;background:rgba(0,0,0,.25)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.tile{background:rgba(0,0,0,.22);border:1px solid var(--line);border-radius:14px;padding:10px 12px;text-align:left;position:relative}
+.tile small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.tile b{display:block;font-family:var(--mono);font-size:19px;font-weight:700;margin-top:2px;letter-spacing:-.01em}
+.tile em{font-style:normal;font-size:12px;color:var(--muted)}
+.tile.copy:after{content:"⧉";position:absolute;right:10px;top:9px;font-size:13px;color:var(--dim)}
+.tile.sl b{color:#ff8b99} .tile.tp b{color:#5fe6b6}
+.money2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.money2>div{border-radius:14px;padding:11px 12px}
+.money2 .lose{background:var(--sell-bg);border:1px solid rgba(255,90,110,.3)}
+.money2 .win{background:var(--buy-bg);border:1px solid rgba(31,209,151,.3)}
+.money2 small{display:block;font-size:12px;font-weight:600;color:var(--muted)}
+.money2 b{font-size:21px;font-weight:800;letter-spacing:-.02em}
+.money2 .lose b{color:var(--sell)} .money2 .win b{color:var(--buy)}
+.howto{margin-top:12px;font-size:13.5px;color:var(--muted);background:rgba(0,0,0,.2);border-radius:12px;padding:10px 12px;line-height:1.55}
+.howto b{color:var(--text)}
+.skip{margin-top:12px;padding:12px;border-radius:14px;background:rgba(0,0,0,.25);border:1px dashed rgba(255,90,110,.45);font-size:14px}
+
+.big{font-size:34px;font-weight:800;letter-spacing:-.03em;line-height:1.1}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.kpi{border-radius:14px;padding:12px;background:rgba(0,0,0,.2);border:1px solid var(--line)}
+.kpi small{display:block;font-size:12.5px;color:var(--muted);font-weight:600}
+.kpi b{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.kpi em{display:block;font-style:normal;font-size:12px;color:var(--dim)}
+.bar{height:10px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--gold),var(--sell))}
+.score{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;text-align:center}
+.score>div{border-radius:14px;padding:12px 6px;background:rgba(0,0,0,.2);border:1px solid var(--line)}
+.score b{display:block;font-size:24px;font-weight:800}
+.score small{font-size:12.5px;color:var(--muted);font-weight:600}
+
+.alert{display:flex;gap:12px;padding:14px;border-radius:16px;background:var(--card);border:1px solid var(--line)}
+.alert+.alert{margin-top:10px}
+.alert .ic{width:42px;height:42px;border-radius:13px;font-size:20px}
+.alert .body{flex:1;min-width:0}
+.alert .t1{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;flex-wrap:wrap}
+.alert .t1 .when{margin-left:auto;font-size:12px;color:var(--dim);font-weight:500}
+.alert .t2{font-size:13.5px;color:var(--muted);margin-top:3px}
+.alert .t2 .num{color:var(--text)}
+.pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700}
+.pill.green{background:var(--buy-bg);color:var(--buy)} .pill.red{background:var(--sell-bg);color:var(--sell)}
+.pill.gold{background:var(--gold-bg);color:var(--gold)} .pill.grey{background:rgba(255,255,255,.07);color:var(--muted)}
+.pill.blue{background:var(--blue-bg);color:var(--blue)}
+.filters{display:flex;gap:8px;margin:0 0 14px;overflow-x:auto}
+.filters button{padding:9px 15px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-weight:600;font-size:14px;color:var(--muted);white-space:nowrap}
+.filters button.on{background:var(--accent-bg);border-color:rgba(123,140,255,.5);color:var(--text)}
+.empty{text-align:center;padding:30px 16px;color:var(--muted)}
+.empty .e{font-size:40px;margin-bottom:8px}
+
+.mk{padding:15px}
+.mk+.mk{margin-top:12px}
+.mk-top{display:flex;align-items:center;gap:10px}
+.mk-top .nm{flex:1;min-width:0}
+.mk-top .nm b{font-size:17px;font-weight:800;display:block}
+.mk-top .nm small{color:var(--muted);font-size:13px}
+.trend{padding:5px 10px;border-radius:999px;font-size:12.5px;font-weight:700;white-space:nowrap}
+.trend.up{background:var(--buy-bg);color:var(--buy)} .trend.down{background:var(--sell-bg);color:var(--sell)} .trend.flat{background:rgba(255,255,255,.07);color:var(--muted)}
+.tiles3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
+.tiles3>div{border-radius:13px;padding:10px 6px;text-align:center;background:rgba(0,0,0,.2);border:1px solid var(--line)}
+.tiles3 small{display:block;font-size:11.5px;color:var(--muted);font-weight:600}
+.tiles3 b{font-size:17px;font-weight:800;letter-spacing:-.02em}
+.tiles3 .l b{color:var(--sell)} .tiles3 .g b{color:var(--buy)}
+.mk-foot{display:flex;align-items:center;justify-content:space-between;margin-top:12px;font-size:13.5px;color:var(--muted)}
+.mk.off{opacity:.55}
+
+.sw{position:relative;width:50px;height:30px;flex:none;display:inline-block}
+.sw input{opacity:0;width:0;height:0}
+.sw i{position:absolute;inset:0;border-radius:99px;background:rgba(255,255,255,.14);transition:.2s}
+.sw i:before{content:"";position:absolute;width:24px;height:24px;left:3px;top:3px;border-radius:50%;background:#fff;transition:.2s}
+.sw input:checked+i{background:var(--buy)}
+.sw input:checked+i:before{transform:translateX(20px)}
+.setting{display:flex;align-items:center;gap:14px;padding:4px 0}
+.setting .txt{flex:1}
+.setting .txt b{display:block;font-size:15px}
+.setting .txt small{color:var(--muted);font-size:13px}
+
+.range{width:100%;margin:14px 0 6px;accent-color:var(--accent);height:28px}
+.ticks{display:flex;justify-content:space-between;font-size:11.5px;color:var(--dim);margin:0 2px}
+.riskbox{margin-top:12px;border-radius:14px;padding:12px 14px;font-size:14.5px;line-height:1.5}
+.riskbox b{white-space:nowrap}
+.riskbox.ok{background:var(--buy-bg);border:1px solid rgba(31,209,151,.3)}
+.riskbox.mid{background:var(--gold-bg);border:1px solid rgba(245,185,74,.3)}
+.riskbox.high{background:var(--sell-bg);border:1px solid rgba(255,90,110,.3)}
+
+.code{font-family:var(--mono);font-size:26px;font-weight:700;letter-spacing:.14em;text-align:center;padding:14px;border-radius:14px;
+  background:rgba(0,0,0,.28);border:1px dashed var(--line2);margin:12px 0 4px;cursor:pointer;user-select:all}
+.steps{counter-reset:s;margin:12px 0 4px}
+.steps li{list-style:none;position:relative;padding-left:38px;margin-bottom:10px;font-size:14.5px}
+.steps li:before{counter-increment:s;content:counter(s);position:absolute;left:0;top:-2px;width:26px;height:26px;border-radius:50%;
+  display:grid;place-items:center;font-weight:800;font-size:13px;background:var(--accent-bg);color:var(--accent)}
+
+.member{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.member:first-child{border-top:0}
+.member .av{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;font-weight:800;background:var(--accent-bg);color:var(--accent);flex:none}
+.member .who{flex:1;min-width:0}
+.member .who b{display:block;font-size:14.5px}
+.member .who small{color:var(--muted);font-size:12.5px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.member button{color:var(--sell);font-size:13px;font-weight:600;padding:6px}
+
+details{border-top:1px solid var(--line);padding:12px 0}
+details:first-of-type{border-top:0}
+summary{font-weight:600;cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px}
+summary::-webkit-details-marker{display:none}
+summary:after{content:"+";color:var(--muted);font-weight:700}
+details[open] summary:after{content:"–"}
+details p{color:var(--muted);font-size:14px;margin-top:8px;line-height:1.55}
+details b{color:var(--text)}
+
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:8px 10px calc(8px + var(--safe-b));
+  background:rgba(10,14,22,.88);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-top:1px solid var(--line)}
+.nav-in{max-width:600px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.nav button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 4px;border-radius:14px;color:var(--dim);font-size:12px;font-weight:600}
+.nav button .i{font-size:21px;line-height:1;filter:grayscale(1);opacity:.75}
+.nav button.on{color:var(--text);background:var(--accent-bg)}
+.nav button.on .i{filter:none;opacity:1}
+.toast{position:fixed;left:50%;bottom:calc(92px + var(--safe-b));transform:translateX(-50%) translateY(20px);opacity:0;z-index:50;
+  background:#1f2a44;border:1px solid var(--line2);color:var(--text);padding:12px 18px;border-radius:14px;font-weight:600;font-size:14px;
+  box-shadow:0 12px 30px rgba(0,0,0,.4);transition:.25s;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.demo-band{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:16px;background:var(--gold-bg);border:1px solid rgba(245,185,74,.4);
+  margin-bottom:14px;font-size:14px;color:#ffe2a6}
+.demo-band button{margin-left:auto;font-weight:700;color:var(--gold);white-space:nowrap}
+.spin{display:inline-block;width:18px;height:18px;border:2.5px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.legal{font-size:12px;color:var(--dim);text-align:center;margin-top:22px;line-height:1.5}
+.legal a{color:var(--dim)}
 </style>
 </head>
 <body>
-<div class="app">
-  <header class="top">
-    <div class="brand">
-      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg></div>
-      <div><h1>AlertesPro</h1><small>MetaTrader 5</small></div>
-    </div>
-    <button class="conn" id="conn" aria-label="État de la connexion"><span class="dot"></span><span id="connTxt">…</span></button>
-  </header>
-
-  <!-- ACCUEIL -->
-  <section class="view on" id="v-home">
-    <div id="setupBanner"></div>
-    <div id="preWrap"></div>
-    <div id="howWrap"></div>
-    <div id="hero"></div>
-    <div id="perfHome"></div>
-    <div class="sec-title"><h2>Dernier signal</h2><button data-go="signals">Tous les signaux</button></div>
-    <div id="lastSignal"></div>
-    <div id="posWrap"></div>
-    <div class="sec-title"><h2>Annonces à venir</h2></div>
-    <div id="newsList"></div>
-    <div class="sec-title"><h2>Calculatrice de lot</h2></div>
-    <div class="card">
-      <label class="field" style="margin-top:0"><span>Marché</span>
-        <select class="input select" id="cSym">
-          <option value="10">EURUSD · GBPUSD (pip ≈ 10 par lot)</option>
-          <option value="6.7">USDJPY (pip ≈ 6,7 par lot)</option>
-          <option value="1">XAUUSD or (0,01 $ ≈ 1 par lot)</option>
-          <option value="custom">Autre : je saisis la valeur</option>
-        </select></label>
-      <div class="grid2">
-        <label class="field"><span>Capital</span><input class="input num" id="cCap" inputmode="decimal" value="10000"></label>
-        <label class="field"><span>Risque %</span><input class="input num" id="cRisk" inputmode="decimal" value="1"></label>
-        <label class="field"><span>Stop (pips)</span><input class="input num" id="cSl" inputmode="decimal" value="30"></label>
-        <label class="field"><span>Valeur du pip / lot</span><input class="input num" id="cPip" inputmode="decimal" value="10"></label>
-      </div>
-      <div class="calc-out"><div><div class="muted" style="font-size:12.5px;font-weight:600">Lot à prendre</div><b class="num" id="cLot">0.33</b></div>
-        <div style="text-align:right"><div class="muted" style="font-size:12.5px;font-weight:600">Perte max</div><b class="num" id="cMax" style="font-size:17px">100</b></div></div>
-      <div class="quick"><button class="mini-btn" id="cFromSig">Remplir avec le dernier signal</button><button class="mini-btn" id="cFromBal">Mon solde</button></div>
-      <p class="dim" style="font-size:12px;margin-top:10px">Valeurs approximatives pour 1 lot standard. Elles varient selon le courtier et la devise du compte : vérifie-les dans MT5 (clic droit sur le symbole › Spécification).</p>
-    </div>
-    <div class="sec-title"><h2>Les règles</h2></div>
-    <div class="card rules" id="rules"></div>
-  </section>
-
-  <!-- SIGNAUX -->
-  <section class="view" id="v-signals">
-    <div class="sec-title" style="margin-top:4px"><h2>Performance des signaux</h2></div>
-    <div id="perfFull"></div>
-    <div class="sec-title"><h2>Signaux de trading</h2><span class="muted" style="font-size:13px" id="sigCount"></span></div>
-    <div class="filters" id="sigFilters"></div>
-    <div class="stack" id="sigList"></div>
-  </section>
-
-  <!-- MARCHÉS -->
-  <section class="view" id="v-markets">
-    <div class="sec-title" style="margin-top:4px"><h2>Marchés</h2><span class="muted" style="font-size:13px" id="mkTf"></span></div>
-    <div id="mkList"></div>
-    <div class="sec-title"><h2>Résumé du matin</h2></div>
-    <div id="summary"></div>
-  </section>
-
-  <!-- ALERTES -->
-  <section class="view" id="v-feed">
-    <div class="sec-title" style="margin-top:4px"><h2>Toutes les alertes</h2></div>
-    <div class="filters" id="feedFilters"></div>
-    <div class="feed" id="feed"></div>
-  </section>
-
-  <!-- RÉGLAGES -->
-  <section class="view" id="v-settings">
-    <div class="sec-title" style="margin-top:4px"><h2>Connexion au robot</h2></div>
-    <div class="card">
-      <label class="field" style="margin-top:0"><span>Code de connexion</span>
-        <div class="row"><input class="input num" id="code" placeholder="alertespro-…" autocomplete="off" autocapitalize="off" spellcheck="false">
-        <button class="btn" id="copyCode" aria-label="Copier le code">Copier</button></div></label>
-      <div class="row" style="margin-top:10px">
-        <button class="btn" id="genCode" style="flex:1">Nouveau code</button>
-        <button class="btn primary" id="saveCode" style="flex:1">Se connecter</button>
-      </div>
-      <button class="btn block" id="testBtn" style="margin-top:10px">Envoyer un message de test</button>
-    </div>
-
-    <div class="sec-title"><h2>Mise en route</h2></div>
-    <div class="card">
-      <a class="btn primary block" id="dlRobot" href="../MQL5/Experts/AlertesPro.mq5" download="AlertesPro.mq5" style="text-decoration:none;margin-bottom:8px">Télécharger le robot MT5 (AlertesPro.mq5)</a>
-      <p class="dim" style="font-size:12.5px;margin-bottom:14px">Ouvre cette page sur ton ordinateur pour télécharger le robot, puis copie-le dans MT5 : Fichier › Ouvrir le dossier des données › MQL5 › Experts. Compile-le avec F7 dans MetaEditor.</p>
-      <ol class="steps">
-        <li>Appuie sur <b>Nouveau code</b>, puis <b>Copier</b>.</li>
-        <li>Dans MT5 : <b>Outils › Options › Expert Advisors</b>, coche <i>Autoriser WebRequest</i> et ajoute <code>https://ntfy.sh</code>.</li>
-        <li>Dans les paramètres d'AlertesPro, colle le code dans <b>Appli : code de connexion</b>.</li>
-        <li>Reviens ici et appuie sur <b>Se connecter</b>. Le message « AlertesPro démarré » apparaît dans Alertes.</li>
-        <li>Sur iPhone : <b>Partager › Sur l'écran d'accueil</b>. Sur Android : <b>⋮ › Installer l'application</b>.</li>
-      </ol>
-      <p class="dim" style="font-size:12.5px">Garde ton code pour toi : quiconque le connaît peut lire tes alertes. Les messages restent 12 h sur le relais, l'historique est gardé sur ton téléphone.</p>
-    </div>
-
-    <div class="sec-title"><h2>Alertes sur Telegram</h2></div>
-    <div class="card">
-      <p class="muted" style="font-size:13.5px;margin-bottom:12px">Reçois chaque pré-alerte, signal et résultat dans Telegram, même téléphone verrouillé.</p>
-      <ol class="steps">
-        <li>Dans Telegram, ouvre ton bot (celui créé avec <b>@BotFather</b>) et envoie <b>/start</b>.</li>
-        <li>Dans Telegram, appuie longuement sur le message de BotFather qui contient le jeton › <b>Copier</b>. Colle-le ici (tout le message, c'est OK), puis touche <b>Vérifier</b> : tu dois recevoir un message de test.</li>
-        <li>Dans MT5, paramètres du robot : <b>Telegram = true</b>, colle le même jeton dans <b>Telegram : token du bot</b> et laisse <b>chat id</b> vide : le robot le trouve tout seul.</li>
-      </ol>
-      <label class="field" style="margin-top:4px"><span>Jeton du bot</span>
-        <input class="input num" id="tgToken" placeholder="123456789:AA…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-      <button class="btn primary block" id="tgCheck" style="margin-top:10px">Vérifier et envoyer un test</button>
-      <div id="tgOut"></div>
-      <p class="dim" style="font-size:12px;margin-top:10px">Le jeton reste sur ce téléphone et n'est envoyé qu'à Telegram. Ne le partage avec personne : il permet de contrôler ton bot.</p>
-    </div>
-
-    <div class="sec-title"><h2>Alertes même appli fermée</h2></div>
-    <div class="card">
-      <p class="muted" style="font-size:13.5px;margin-bottom:12px">Un navigateur ne peut pas réveiller ton téléphone quand l'appli est fermée. Pour ne rater aucun signal, ajoute l'une de ces deux options :</p>
-      <ol class="steps">
-        <li><b>Appli ntfy</b> (gratuite) : installe <b>ntfy</b> depuis l'App Store ou le Play Store, touche <b>+</b>, colle ton code comme nom de sujet, serveur <code>ntfy.sh</code>. Les signaux sonnent comme un SMS.</li>
-        <li><b>Telegram</b> : voir la section juste au-dessus.</li>
-      </ol>
-      <button class="btn block" id="copyCode2">Copier mon code pour ntfy</button>
-      <p class="dim" style="font-size:12px;margin-top:10px">Les mises à jour du compte (toutes les 15 min) partent en priorité minimale : elles ne sonnent pas.</p>
-    </div>
-
-    <div class="sec-title"><h2>Préférences</h2></div>
-    <div class="card" style="padding-top:4px;padding-bottom:4px">
-      <div class="toggle"><div><b>Notifications</b><small>Quand l'appli est ouverte en arrière-plan</small></div><button class="sw" id="swNotif" aria-label="Notifications"></button></div>
-      <div class="toggle"><div><b>Son pour les signaux</b><small>Un petit bip à chaque signal</small></div><button class="sw" id="swSound" aria-label="Son"></button></div>
-      <div class="toggle"><div><b>Mode démo</b><small>Données d'exemple pour découvrir l'appli</small></div><button class="sw" id="swDemo" aria-label="Mode démo"></button></div>
-    </div>
-    <button class="btn block" id="clearBtn" style="margin-top:14px;color:var(--sell)">Effacer l'historique</button>
-    <p class="disclaimer">AlertesPro ne passe aucun ordre et ne garantit aucun gain. Le trading à effet de levier peut faire perdre plus que prévu. Teste toujours sur un compte démo avant de risquer de l'argent réel.</p>
-  </section>
-</div>
-
-<nav class="nav" id="nav">
-  <button class="on" data-view="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Accueil</button>
-  <button data-view="signals"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg>Signaux<span class="count" id="sigBadge" hidden></span></button>
-  <button data-view="markets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>Marchés</button>
-  <button data-view="feed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>Alertes<span class="count" id="feedBadge" hidden></span></button>
-  <button data-view="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Réglages</button>
-</nav>
+<div id="root"></div>
 <div class="toast" id="toast"></div>
 
 <script>
-(() => {
-  "use strict";
-  const RELAY = "https://ntfy.sh";
-  const MAX_MSG = 400;
-  const $ = (id) => document.getElementById(id);
+"use strict";
+// ======================================================================
+//  Adresse du serveur AlertesPro (Cloudflare). Vide tant qu'il n'est pas
+//  installé : l'appli montre alors seulement l'exemple.
+// ======================================================================
+const DEFAULT_API = "";
 
-  // ---------- Stockage local (préférences + historique sur cet appareil) ----------
-  const store = {
-    get(k, d) { try { const v = localStorage.getItem("ap_" + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
-    set(k, v) { try { localStorage.setItem("ap_" + k, JSON.stringify(v)); } catch (e) {} }
+const LOGO = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l4.5-4.5 3.5 3.5 6-7"/><path d="M14 8h4v4"/></svg>';
+const NAMES = { EURUSD: "Euro / Dollar", GBPUSD: "Livre / Dollar", USDJPY: "Dollar / Yen", XAUUSD: "Or", XAGUSD: "Argent (métal)", AUDUSD: "Dollar australien / Dollar",
+  USDCHF: "Dollar / Franc suisse", USDCAD: "Dollar / Dollar canadien", NZDUSD: "Dollar néo-zélandais / Dollar", EURGBP: "Euro / Livre", EURJPY: "Euro / Yen",
+  GBPJPY: "Livre / Yen", BTCUSD: "Bitcoin" };
+
+// ------------------------------------------------------------------ stockage
+const LS = {
+  get(k) { try { return localStorage.getItem("ap2_" + k); } catch (e) { return null; } },
+  set(k, v) { try { v == null ? localStorage.removeItem("ap2_" + k) : localStorage.setItem("ap2_" + k, v); } catch (e) {} },
+};
+const params = new URLSearchParams(location.search.slice(1) + "&" + location.hash.slice(1));
+if (params.get("s")) LS.set("api", params.get("s").trim().replace(/\/+$/, ""));
+const invFromLink = (params.get("i") || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+if (invFromLink) LS.set("invite", invFromLink);
+if (location.hash || params.get("s") || params.get("i")) history.replaceState(null, "", location.pathname);
+let API = (LS.get("api") || DEFAULT_API).replace(/\/+$/, "");
+
+const S = {
+  token: LS.get("token"), view: "welcome", tab: "home", filter: "all", demo: false,
+  me: null, alerts: [], markets: null, admin: null, info: null,
+  form: {}, error: "", msg: "", busy: false, forgotStep: 1,
+};
+
+// ------------------------------------------------------------------ outils
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const NF = {};
+function fmt(v, d = 2) { const n = Number(v); if (!Number.isFinite(n)) return "–"; return (NF[d] || (NF[d] = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }))).format(n); }
+function eur(v, sign = false, d = 2) {
+  const n = Number(v) || 0;
+  const s = sign ? (n > 0.004 ? "+" : n < -0.004 ? "−" : "") : (n < -0.004 ? "−" : "");
+  return s + fmt(Math.abs(n), d) + " €";
+}
+const eur0 = (v) => eur(v, false, Number(v) % 1 ? 2 : 0);
+const pct = (v) => fmt(v, 2).replace(/,00$/, "").replace(/(,\d)0$/, "$1") + "\u00a0%";
+const lotTxt = (v) => (Number(v) || 0).toFixed(2);
+function px(v, dg) { const n = Number(v); if (!Number.isFinite(n)) return "–"; return n.toFixed(Number.isFinite(+dg) ? +dg : 5); }
+const nowS = () => Math.floor(Date.now() / 1000);
+const hhmm = (ts) => new Date(ts * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+function when(ts) {
+  const d = new Date(ts * 1000), t = new Date(), y = new Date(Date.now() - 86400000);
+  if (d.toDateString() === t.toDateString()) return "aujourd'hui " + hhmm(ts);
+  if (d.toDateString() === y.toDateString()) return "hier " + hhmm(ts);
+  return d.toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" }) + " " + hhmm(ts);
+}
+function ago(ts) {
+  const s = nowS() - ts;
+  if (s < 90) return "à l'instant";
+  if (s < 3600) return "il y a " + Math.round(s / 60) + " min";
+  if (s < 86400) return "il y a " + Math.round(s / 3600) + " h";
+  return "le " + when(ts);
+}
+const symName = (s) => NAMES[String(s).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6)] || "";
+let toastT = 0;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2600); }
+async function copy(text, label) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) { const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); } catch (x) {} ta.remove(); }
+  toast("📋 " + (label || text) + " copié");
+}
+const leftTxt = (left) => (left > 0 ? "⏱ encore " + (left >= 120 ? Math.ceil(left / 60) + " min" : left + " s") : "⏱ terminé");
+
+// ------------------------------------------------------------------ serveur
+async function api(path, method = "GET", body) {
+  if (!API) throw new Error("Le serveur n'est pas encore branché.");
+  let r;
+  try {
+    r = await fetch(API + path, { method, headers: { "Content-Type": "application/json", ...(S.token ? { Authorization: "Bearer " + S.token } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  } catch (e) { throw new Error("Pas de connexion au serveur. Vérifie ton internet."); }
+  let j = {};
+  try { j = await r.json(); } catch (e) {}
+  if (r.status === 401 && S.token && path !== "/api/me/delete") { logout(true); throw new Error(j.error || "Session expirée : reconnecte-toi."); }
+  if (!r.ok || j.ok === false) throw new Error(j.error || "Erreur " + r.status);
+  return j;
+}
+function setMe(j) { S.me = j; if (j.token) { S.token = j.token; LS.set("token", j.token); } }
+
+async function refresh(all = true) {
+  if (S.demo || !S.token) return;
+  try {
+    const jobs = [api("/api/me").then(setMe)];
+    if (all) {
+      jobs.push(api("/api/alerts?limit=80").then((j) => { S.alerts = j.alerts; }));
+      jobs.push(api("/api/markets").then((j) => { S.markets = j; }));
+    }
+    await Promise.all(jobs);
+    if (S.me && S.me.user.admin && (all || S.tab === "account")) S.admin = await api("/api/admin");
+  } catch (e) { console.warn(e); }
+  render(true);
+}
+
+let pollT = 0;
+function startPolling() {
+  clearInterval(pollT);
+  pollT = setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 30000);
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && S.token && !S.demo) refresh(); });
+setInterval(() => document.querySelectorAll("[data-left]").forEach((el) => { el.textContent = leftTxt(+el.dataset.left - nowS()); }), 1000);
+
+function logout(silent) {
+  if (S.token && !silent && API) api("/api/logout", "POST").catch(() => {});
+  S.token = null; LS.set("token", null); S.me = null; S.alerts = []; S.markets = null; S.admin = null; S.demo = false;
+  clearInterval(pollT);
+  go("welcome");
+}
+
+function go(view, tab) {
+  S.view = view; if (tab) S.tab = tab; S.error = ""; S.msg = "";
+  render(); window.scrollTo(0, 0);
+}
+function setTab(tab) { S.tab = tab; S.form = {}; S.error = ""; render(); window.scrollTo(0, 0); if (tab === "account" && S.me && S.me.user.admin && !S.demo) refresh(false); }
+
+// ------------------------------------------------------------------ exemple
+function demoData() {
+  const t = nowS();
+  const mk = (sym, dir, p, dg, lot, risk, minCapital) => ({ sym, dir, px: p, dg, ok: !!lot, lot, risk, gain: risk * 2, minCapital, followed: true, news: "" });
+  S.me = {
+    user: { name: "Karim", email: "karim@exemple.fr", capital: 1000, riskPct: 1, riskMoney: 10, dailyStop: 30, admin: false, paused: false, markets: "*",
+      telegram: { linked: true, name: "Karim" }, linkCode: "AB3K9QXZ", linkUrl: "", stoppedUntil: 0 },
+    stats: { wins: 7, losses: 4, money: 61.4, today: 16.3, open: 1 },
+    robot: { online: true, lastSeen: t - 120, tf: "H1", rr: 2, cur: "EUR" }, bot: "alertes_trading_4827_bot",
   };
-
-  const S = {
-    code: store.get("code", ""),
-    demo: store.get("demo", false),
-    notif: store.get("notif", false),
-    sound: store.get("sound", true),
-    msgs: store.get("msgs", []),
-    seen: store.get("seen", { signals: 0, feed: 0 }),
-    view: "home",
-    conn: "off",
-    sigFilter: "all",
-    feedFilter: "all"
+  S.markets = { online: true, updated: t - 120, tf: "H1", rr: 2, markets: [
+    mk("EURUSD", "up", 1.08452, 5, "0.05", 8.33), mk("GBPUSD", "down", 1.295, 5, "0.04", 8.15),
+    mk("USDJPY", "flat", 152.304, 3, "0.06", 9.12), mk("XAUUSD", "up", 2650.5, 2, null, null, 2084)] };
+  const sig = (id, sym, side, entry, sl, tp, dg, lot, risk, created, extra = {}) => {
+    const pip = dg === 3 ? 0.01 : dg === 2 ? 0.1 : 0.0001;
+    return { id, kind: "signal", sym, lot, risk, gain: risk * 2, note: null, result: null, r: null, money: null, created,
+      data: { sym, side, tf: "H1", entry, sl, tp, dg, rr: 2, lim: side === "buy" ? entry + (entry - sl) * 0.2 : entry - (sl - entry) * 0.2, vu: created + 900,
+        slp: Math.abs(entry - sl) / pip, rs: "Tendance haussière (prix au-dessus de l'EMA 200) · confirmée en H4 · tendance forte (ADX 27)" }, ...extra };
   };
+  S.alerts = [
+    sig(9, "EURUSD", "buy", 1.08452, 1.08272, 1.08812, 5, 0.05, 8.33, t - 200),
+    { id: 8, kind: "pre", sym: "EURUSD", lot: 0.05, risk: 8.33, created: t - 260, data: { sym: "EURUSD", side: "buy", at: t - 200 } },
+    sig(7, "GBPUSD", "sell", 1.295, 1.2972, 1.2906, 5, 0.04, 8.15, t - 3 * 3600, { result: "tp", r: 2, money: 16.3 }),
+    sig(6, "XAUUSD", "sell", 2650.5, 2673, 2605.5, 2, 0, 20.83, t - 7 * 3600, { note: "small:2084" }),
+    sig(5, "USDJPY", "buy", 152.1, 151.85, 152.6, 3, 0.06, 9.12, t - 26 * 3600, { result: "sl", r: -1, money: -9.12 }),
+    { id: 4, kind: "cancel", sym: "EURUSD", created: t - 30 * 3600, data: { sym: "EURUSD" } },
+    sig(3, "EURUSD", "buy", 1.0812, 1.0794, 1.0848, 5, 0.05, 8.33, t - 50 * 3600, { result: "tp", r: 2, money: 16.67 }),
+  ];
+}
+function startDemo() { S.demo = true; demoData(); go("main", "home"); }
 
-  // ---------- Utilitaires ----------
-  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const num = (v) => { const n = parseFloat(String(v).replace(",", ".")); return isFinite(n) ? n : NaN; };
-  const fmt = (n, d = 2) => isFinite(n) ? n.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }) : "–";
-  const money = (n, cur) => (n > 0 ? "+" : "") + fmt(n) + (cur ? " " + cur : "");
-  const decimals = (s) => { const p = String(s).split("."); return p[1] ? p[1].length : 0; };
-  const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
+// ------------------------------------------------------------------ rendu
+function render(fromPoll) {
+  if (fromPoll && document.activeElement && document.activeElement.tagName === "INPUT") return;
+  let html;
+  if (S.view === "welcome") html = viewWelcome();
+  else if (S.view === "signup") html = viewSignup();
+  else if (S.view === "login") html = viewLogin();
+  else if (S.view === "forgot") html = viewForgot();
+  else html = viewMain();
+  $("#root").innerHTML = html;
+  bind();
+}
 
-  function ago(t) {
-    const s = Math.max(0, Date.now() / 1000 - t);
-    if (s < 60) return "à l'instant";
-    if (s < 3600) return "il y a " + Math.floor(s / 60) + " min";
-    if (s < 86400) return "il y a " + Math.floor(s / 3600) + " h";
-    return new Date(t * 1000).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+function viewWelcome() {
+  const inv = LS.get("invite");
+  return '<div class="app solo"><div class="welcome"><div class="logo">' + LOGO + "</div><h1>AlertesPro</h1>" +
+    '<p class="lead">Les signaux <b class="green">ACHAT</b> / <b class="red">VENTE</b> du robot MT5, sur ton Telegram, <b>calculés pour ton argent</b>.</p>' +
+    (inv && API ? '<div class="okmsg" style="margin-bottom:16px;text-align:left">🎟️ Tu as reçu une invitation. Crée ton compte pour commencer.</div>' : "") +
+    '<div class="feats">' +
+    '<div class="feat"><div class="ic gold">🟡</div><div><b>1 minute avant</b><span>Une pré-alerte pour ouvrir MT5 à temps</span></div></div>' +
+    '<div class="feat"><div class="ic green">🟢</div><div><b>Le signal complet</b><span>Prix d\'entrée, Stop Loss, Take Profit et volume</span></div></div>' +
+    '<div class="feat"><div class="ic blue">💶</div><div><b>Ton argent, en euros</b><span>Combien tu peux perdre ou gagner sur chaque trade</span></div></div>' +
+    '<div class="feat"><div class="ic red">🛡️</div><div><b>Protégé contre les grosses pertes</b><span>2 % de risque maximum par trade, stop automatique à −3 % par jour</span></div></div>' +
+    "</div>" +
+    (API ? '<button class="btn" data-go="signup">Créer mon compte</button><button class="btn ghost" data-go="login">J\'ai déjà un compte</button>'
+         : '<div class="warn" style="margin-bottom:12px">⚙️ Le serveur n\'est pas encore installé. En attendant, regarde l\'exemple pour voir à quoi ça ressemble.</div>') +
+    '<button class="btn line" style="margin-top:10px" data-act="demo">👀 Voir un exemple</button>' +
+    '<p class="legal">Le trading peut faire perdre de l\'argent. Les signaux sont automatiques et ne sont pas des conseils en investissement. Commence sur un compte démo.<br><a href="#" data-act="server">Réglage du serveur</a></p>' +
+    "</div></div>";
+}
+
+function formHead(title, back) {
+  return '<div class="form-head"><button class="back" data-go="' + (back || "welcome") + '" aria-label="Retour">‹</button><h1>' + title + "</h1></div>";
+}
+function field(id, label, o = {}) {
+  const v = S.form[id] != null ? S.form[id] : o.value != null ? o.value : "";
+  return '<label class="field"><span>' + label + '</span><div class="inp"><input id="f_' + id + '" name="' + id + '" value="' + esc(v) + '" type="' + (o.type || "text") + '"' +
+    (o.mode ? ' inputmode="' + o.mode + '"' : "") + (o.ac ? ' autocomplete="' + o.ac + '"' : "") + (o.ph ? ' placeholder="' + esc(o.ph) + '"' : "") +
+    (o.caps ? ' autocapitalize="characters"' : ' autocapitalize="off"') + ' spellcheck="false">' +
+    (o.suf ? '<span class="suf">' + o.suf + "</span>" : "") + (o.type === "password" ? '<button type="button" data-act="eye" data-for="f_' + id + '" aria-label="Voir le mot de passe">👁</button>' : "") +
+    "</div>" + (o.hint ? "<small>" + o.hint + "</small>" : "") + "</label>";
+}
+const msgBox = () => (S.error ? '<div class="err" style="margin-bottom:14px">⚠️ ' + esc(S.error) + "</div>" : "") + (S.msg ? '<div class="okmsg" style="margin-bottom:14px">' + esc(S.msg) + "</div>" : "");
+const busy = (label) => (S.busy ? '<span class="spin"></span>' : label);
+
+function viewSignup() {
+  const needInvite = !S.info || S.info.needInvite;
+  const inv = LS.get("invite") || "";
+  return '<div class="app solo">' + formHead("Créer mon compte") + '<form id="signup" novalidate>' + msgBox() +
+    field("name", "Ton prénom", { ac: "given-name", ph: "Ex. Karim" }) +
+    field("email", "Ton e-mail", { type: "email", ac: "email", ph: "toi@exemple.fr", mode: "email" }) +
+    field("password", "Choisis un mot de passe", { type: "password", ac: "new-password", hint: "8 caractères minimum." }) +
+    field("capital", "Ton capital de trading", { mode: "decimal", suf: "€", ph: "1000", hint: "L'argent sur ton compte MT5 (ou ton compte démo). Le volume de chaque trade est calculé avec." }) +
+    (needInvite ? field("invite", "Code d'invitation", { value: inv, caps: true, ph: "Ex. GX9JZD", hint: inv ? "Rempli tout seul grâce à ton lien d'invitation." : "Demande le lien d'invitation à la personne qui t'a parlé de l'appli." }) : "") +
+    '<label class="check"><input type="checkbox" name="ok" id="f_ok"' + (S.form.ok ? " checked" : "") + '><span>J\'ai compris que le trading peut faire perdre de l\'argent et que les signaux ne sont pas des conseils. Je commence petit ou sur un compte démo.</span></label>' +
+    '<button class="btn" type="submit"' + (S.busy ? " disabled" : "") + ">" + busy("Créer mon compte") + "</button>" +
+    '<p class="center" style="margin-top:16px"><a href="#" class="link" data-go="login">J\'ai déjà un compte</a></p></form></div>';
+}
+
+function viewLogin() {
+  return '<div class="app solo">' + formHead("Se connecter") + '<form id="login" novalidate>' + msgBox() +
+    field("email", "Ton e-mail", { type: "email", ac: "email", mode: "email" }) +
+    field("password", "Ton mot de passe", { type: "password", ac: "current-password" }) +
+    '<button class="btn" type="submit"' + (S.busy ? " disabled" : "") + ">" + busy("Se connecter") + "</button>" +
+    '<p class="center" style="margin-top:18px"><a href="#" class="link" data-act="forgot">Mot de passe oublié ?</a></p>' +
+    '<p class="center" style="margin-top:12px"><a href="#" class="link" data-go="signup">Créer un compte</a></p></form></div>';
+}
+
+function viewForgot() {
+  const s1 = S.forgotStep === 1;
+  return '<div class="app solo">' + formHead("Mot de passe oublié", "login") + '<form id="forgot" novalidate>' + msgBox() +
+    (s1 ? '<p class="muted" style="margin-bottom:14px">On t\'envoie un code sur ton <b>Telegram</b> (celui relié à ton compte).</p>' +
+      field("email", "Ton e-mail", { type: "email", ac: "email", mode: "email" }) +
+      '<button class="btn" type="submit"' + (S.busy ? " disabled" : "") + ">" + busy("Recevoir le code sur Telegram") + "</button>" +
+      '<p class="note">Ton Telegram n\'est pas relié ? Demande à la personne qui t\'a invité de retirer ton compte, puis recrée-le.</p>'
+    : field("code", "Code reçu sur Telegram", { mode: "numeric", ph: "6 chiffres", ac: "one-time-code" }) +
+      field("password", "Nouveau mot de passe", { type: "password", ac: "new-password", hint: "8 caractères minimum." }) +
+      '<button class="btn" type="submit"' + (S.busy ? " disabled" : "") + ">" + busy("Changer mon mot de passe") + "</button>" +
+      '<p class="center" style="margin-top:16px"><a href="#" class="link" data-act="forgot-again">Renvoyer un code</a></p>') +
+    "</form></div>";
+}
+
+// ------------------------------------------------------------------ écran principal
+function viewMain() {
+  const r = S.me && S.me.robot;
+  const chip = S.demo ? '<span class="chip demo"><span class="dot"></span>Exemple</span>'
+    : r && r.online ? '<span class="chip on"><span class="dot"></span>Robot en ligne</span>'
+    : '<span class="chip off"><span class="dot"></span>Robot hors ligne</span>';
+  let body = '<div class="empty"><span class="spin"></span></div>';
+  if (S.me) body = S.tab === "markets" ? tabMarkets() : S.tab === "alerts" ? tabAlerts() : S.tab === "account" ? tabAccount() : tabHome();
+  const band = S.demo ? '<div class="demo-band">👀 Exemple avec de faux chiffres.<button data-act="exit-demo">' + (API ? "Créer mon compte ›" : "Quitter") + "</button></div>" : "";
+  const tabs = [["home", "🏠", "Accueil"], ["markets", "📈", "Marchés"], ["alerts", "🔔", "Alertes"], ["account", "👤", "Compte"]];
+  return '<div class="app"><div class="top"><div class="brand"><div class="logo">' + LOGO + "</div><b>AlertesPro</b></div>" + chip + "</div>" + band + body + "</div>" +
+    '<nav class="nav"><div class="nav-in">' + tabs.map(([k, i, l]) => '<button data-tab="' + k + '" class="' + (S.tab === k ? "on" : "") + '"><span class="i">' + i + "</span>" + l + "</button>").join("") + "</div></nav>";
+}
+
+function telegramCard(full) {
+  const u = S.me.user;
+  if (u.telegram.linked) return "";
+  return '<div class="card tone-blue"><h3>📲 Relie ton Telegram</h3>' +
+    '<p class="muted small">C\'est là que tu reçois les alertes calculées pour ton argent. Ça prend 10 secondes :</p>' +
+    '<ol class="steps"><li>Touche le bouton bleu : Telegram s\'ouvre sur le bot</li><li>Touche <b>DÉMARRER</b> (ou <b>START</b>) en bas</li><li>Reviens ici : c\'est relié ✅</li></ol>' +
+    (u.linkUrl ? '<a class="btn tg" href="' + esc(u.linkUrl) + '" target="_blank" rel="noopener" data-act="tg-open">✈️ Relier mon Telegram</a>' : "") +
+    (full ? '<p class="small muted" style="margin-top:14px">Ou envoie ce code secret au bot <b>@' + esc(S.me.bot || "") + '</b> :</p><div class="code" data-copy="' + esc(u.linkCode) + '" data-label="Code">' + esc(u.linkCode) + "</div>" : "") +
+    '<button class="btn line" style="margin-top:10px" data-act="check-tg">🔄 J\'ai relié, vérifier</button></div>';
+}
+
+function liveCard() {
+  const t = nowS();
+  const live = S.alerts.filter((a) => a.kind === "signal" && !a.result && a.data && a.data.vu > t);
+  const sig = live.find((a) => a.lot > 0) || live[0];
+  if (sig) return signalCard(sig);
+  const a = S.alerts[0];
+  if (a && a.kind === "pre" && a.created > t - 240) {
+    const d = a.data || {};
+    return '<div class="live pre"><div class="live-top"><span class="side pre">🟡 PRÉPARE-TOI</span><span class="sym">' + esc(a.sym) + "</span>" +
+      (d.at > t ? '<span class="timer" data-left="' + d.at + '"></span>' : "") + "</div>" +
+      '<p style="margin-top:12px;font-size:16px"><b class="' + (d.side === "buy" ? "green" : "red") + '">' + (d.side === "buy" ? "ACHAT" : "VENTE") + "</b> possible à <b>" + hhmm(d.at || a.created) + "</b>.</p>" +
+      '<p class="muted" style="margin-top:6px">📱 Ouvre MT5 sur <b>' + esc(a.sym) + "</b> maintenant." + (a.lot > 0 ? " Volume prévu : <b>" + lotTxt(a.lot) + " lot</b>." : "") + "</p>" +
+      '<p class="muted small" style="margin-top:6px">✋ N\'entre pas avant le signal : il peut encore s\'annuler.</p></div>';
   }
-  const hhmm = (t) => new Date(t * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  return "";
+}
 
-  function toast(txt) {
-    const el = $("toast"); el.textContent = txt; el.classList.add("show");
-    clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 2200);
+function signalCard(a) {
+  const d = a.data || {}, buy = d.side === "buy", dg = d.dg, t = nowS();
+  const lot = a.lot > 0 ? lotTxt(a.lot) : null;
+  let html = '<div class="live ' + (buy ? "buy" : "sell") + '"><div class="live-top"><span class="side ' + (buy ? "buy" : "sell") + '">' + (buy ? "🟢 ACHAT" : "🔴 VENTE") + '</span><span class="sym">' + esc(a.sym) + "</span>" +
+    (d.vu > t ? '<span class="timer" data-left="' + d.vu + '"></span>' : "") + "</div>" +
+    '<p class="muted small" style="margin-top:4px">' + esc(symName(a.sym) || "Signal") + (d.tf ? " · " + esc(d.tf) : "") + " · touche un prix pour le copier</p>" +
+    '<div class="tiles">' +
+    '<button class="tile copy" data-copy="' + px(d.entry, dg) + '" data-label="Entrée"><small>💶 Entrée</small><b>' + px(d.entry, dg) + "</b></button>" +
+    '<button class="tile copy" data-copy="' + (lot || "") + '" data-label="Volume"><small>📦 Volume</small><b>' + (lot || "—") + "</b><em>" + (lot ? "lot" : "pas de trade") + "</em></button>" +
+    '<button class="tile copy sl" data-copy="' + px(d.sl, dg) + '" data-label="Stop Loss"><small>🛑 Stop Loss</small><b>' + px(d.sl, dg) + "</b><em>" + (d.slp ? "−" + fmt(d.slp, 1) + " pips" : "") + "</em></button>" +
+    '<button class="tile copy tp" data-copy="' + px(d.tp, dg) + '" data-label="Take Profit"><small>🎯 Take Profit</small><b>' + px(d.tp, dg) + "</b><em>" + (d.slp ? "+" + fmt(d.slp * (d.rr || 2), 1) + " pips" : "") + "</em></button>" +
+    "</div>";
+  if (lot) {
+    html += '<div class="money2"><div class="lose"><small>🔴 Si Stop Loss</small><b>' + eur(-a.risk, true) + '</b></div><div class="win"><small>🟢 Si Take Profit</small><b>' + eur(a.gain, true) + "</b></div></div>" +
+      '<div class="howto">⚠️ Trop tard si le prix est ' + (buy ? "au-dessus de " : "en dessous de ") + "<b>" + px(d.lim, dg) + "</b><br>📲 Dans MT5 : <b>" + esc(a.sym) + "</b> › Nouvel ordre › Volume <b>" + lot + "</b> › SL <b>" + px(d.sl, dg) + "</b> › TP <b>" + px(d.tp, dg) + "</b> › <b>" + (buy ? "BUY" : "SELL") + "</b></div>";
+  } else html += '<div class="skip">⛔ <b>Passe ton tour</b> : ' + skipText(a) + "</div>";
+  if (d.rs) html += '<p class="muted small" style="margin-top:10px">📊 ' + esc(d.rs) + "</p>";
+  return html + "</div>";
+}
+function skipText(a) {
+  const n = String(a.note || "");
+  if (n === "max_open") return "tu avais déjà 3 trades en cours (protection).";
+  if (n.startsWith("small") || n.startsWith("margin")) {
+    const need = +n.split(":")[1];
+    return "ton capital est trop petit pour ce marché" + (need ? " (il faudrait environ " + eur0(need) + ")" : "") + ".";
   }
+  return "ce trade n'était pas possible pour ton compte.";
+}
 
-  async function copy(txt) {
-    try { await navigator.clipboard.writeText(txt); toast("Copié : " + txt); }
-    catch (e) { toast(txt); }
-  }
+function tabHome() {
+  const { user: u, stats: st } = S.me;
+  const rr = (S.me.robot && S.me.robot.rr) || 2;
+  const lossToday = Math.max(0, -st.today);
+  const stopPct = Math.min(100, (lossToday / (u.dailyStop || 1)) * 100);
+  let html = '<div class="hello">Salut ' + esc(u.name) + " 👋<small>" + (S.me.robot && S.me.robot.online ? "Le robot surveille les marchés pour toi." : "Le robot est hors ligne : pas de nouveau signal pour l'instant.") + "</small></div><div class=\"stack\">";
+  html += telegramCard(false);
+  if (u.stoppedUntil) html += '<div class="card tone-red"><h3>🛑 Stop pour aujourd\'hui</h3><p class="muted">Tu as perdu ' + eur(lossToday) + " aujourd'hui. Plus de signaux jusqu'à demain : c'est ce qui protège ton compte.</p></div>";
+  else if (u.paused) html += '<div class="card tone-gold"><h3>⏸️ Signaux en pause</h3><p class="muted">Tu ne reçois plus de nouveaux signaux.</p><button class="btn small green" style="margin-top:12px" data-act="resume">▶️ Reprendre</button></div>';
+  html += liveCard();
+  html += '<div class="card tone-violet"><div class="row" style="align-items:flex-start"><div><small class="muted" style="font-weight:600">💼 Ton capital</small><div class="big">' + eur0(u.capital) + '</div></div><button class="btn small ghost" style="flex:none" data-tab="account">Modifier</button></div>' +
+    '<div class="kpis"><div class="kpi"><small>🔴 Perte max par trade</small><b class="red">' + eur(-u.riskMoney) + "</b><em>" + pct(u.riskPct) + " de ton capital</em></div>" +
+    '<div class="kpi"><small>🟢 Gain visé par trade</small><b class="green">' + eur(u.riskMoney * rr, true) + "</b><em>" + rr + " × la perte max</em></div></div>" +
+    '<div style="margin-top:14px"><div class="row small"><span class="muted">📅 Aujourd\'hui</span><b style="text-align:right" class="' + (st.today > 0 ? "green" : st.today < 0 ? "red" : "") + '">' + eur(st.today, true) + "</b></div>" +
+    '<div class="bar"><i style="width:' + stopPct.toFixed(0) + '%"></i></div><p class="dim small" style="margin-top:6px">🛡️ Stop automatique si tu perds ' + eur(u.dailyStop) + " dans la journée.</p></div></div>";
+  html += '<div class="card"><h3>📊 Ton bilan</h3><p class="muted small">Si tu as suivi tous les signaux reçus.</p>' +
+    '<div class="score"><div><b class="green">' + st.wins + '</b><small>✅ gagnés</small></div><div><b class="red">' + st.losses + "</b><small>❌ perdus</small></div><div><b>" + st.open + "</b><small>⏳ en cours</small></div></div>" +
+    '<div class="row" style="margin-top:12px"><span class="muted">Total</span><b style="text-align:right;font-size:22px" class="' + (st.money >= 0 ? "green" : "red") + '">' + eur(st.money, true) + "</b></div></div></div>";
+  html += '<div class="sec"><h2>Dernières alertes</h2>' + (S.alerts.length ? '<button data-tab="alerts">Tout voir ›</button>' : "") + "</div>";
+  html += S.alerts.length ? S.alerts.slice(0, 4).map(alertRow).join("") : emptyAlerts();
+  return html;
+}
 
-  // tags "cle=valeur" -> objet (m, p et o peuvent se répéter)
-  function parse(m) {
-    const d = { m: [], p: [], o: [] };
-    (m.tags || []).forEach((t) => {
-      const i = t.indexOf("=");
-      if (i < 1) return;
-      const k = t.slice(0, i).toLowerCase(), v = t.slice(i + 1);
-      if (k === "m" || k === "p" || k === "o") d[k].push(v.split("|")); else d[k] = v;
-    });
-    return { id: m.id, time: m.time, title: m.title || "", message: m.message || "", kind: (d.k || "info").toLowerCase(), d };
-  }
+function emptyAlerts() {
+  return '<div class="card empty"><div class="e">🔕</div><b>Pas encore d\'alerte</b><p class="small" style="margin-top:6px">Le robot envoie un signal seulement quand toutes ses conditions sont réunies : parfois plusieurs par jour, parfois aucun. Tu seras prévenu sur Telegram.</p></div>';
+}
 
-  // ---------- Icônes ----------
-  const ICONS = {
-    signal: '<path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/>',
-    news: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
-    trade: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
-    account: '<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
-    line: '<path d="M3 12h18"/><path d="M3 6l4 3 4-4 4 5 6-4" opacity=".5"/>',
-    market: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
-    summary: '<path d="M4 6h16M4 12h16M4 18h10"/>',
-    info: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/>',
-    check: '<path d="M20 6L9 17l-5-5"/>',
-    result: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
-    pre: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 2h6"/>',
-    copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
-    inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/>'
+function alertRow(a) {
+  const d = a.data || {};
+  if (a.kind === "pre") return '<div class="alert"><div class="ic gold">🟡</div><div class="body"><div class="t1">Prépare-toi · ' + esc(a.sym) + '<span class="when">' + when(a.created) + "</span></div>" +
+    '<div class="t2">' + (d.side === "buy" ? "Achat" : "Vente") + " possible à " + hhmm(d.at || a.created) + "</div></div></div>";
+  if (a.kind === "cancel") return '<div class="alert"><div class="ic grey">⚪</div><div class="body"><div class="t1">Annulé · ' + esc(a.sym) + '<span class="when">' + when(a.created) + '</span></div><div class="t2">Les conditions ne sont plus réunies. Rien à faire.</div></div></div>';
+  const buy = d.side === "buy";
+  let pill;
+  if (a.result === "tp") pill = '<span class="pill green">✅ ' + eur(a.money, true) + "</span>";
+  else if (a.result === "sl") pill = '<span class="pill red">❌ ' + eur(a.money, true) + "</span>";
+  else if (a.result) pill = '<span class="pill ' + (a.money >= 0 ? "green" : "red") + '">⌛ ' + eur(a.money, true) + "</span>";
+  else if (!(a.lot > 0)) pill = '<span class="pill grey">⛔ pas pris</span>';
+  else if (d.vu > nowS()) pill = '<span class="pill blue">⏱ jusqu\'à ' + hhmm(d.vu) + "</span>";
+  else pill = '<span class="pill gold">⏳ en cours</span>';
+  const line = a.lot > 0
+    ? 'Entrée <span class="num">' + px(d.entry, d.dg) + '</span> · SL <span class="num">' + px(d.sl, d.dg) + '</span> · TP <span class="num">' + px(d.tp, d.dg) + "</span><br>📦 " + lotTxt(a.lot) + ' lot · <span class="red">' + eur(-a.risk) + '</span> / <span class="green">' + eur(a.gain, true) + "</span>"
+    : skipText(a);
+  return '<div class="alert"><div class="ic ' + (buy ? "green" : "red") + '">' + (buy ? "🟢" : "🔴") + '</div><div class="body"><div class="t1">' + (buy ? "Achat" : "Vente") + " · " + esc(a.sym) + " " + pill + '<span class="when">' + when(a.created) + '</span></div><div class="t2">' + line + "</div></div></div>";
+}
+
+function tabAlerts() {
+  const f = S.filter;
+  const list = S.alerts.filter((a) => f === "all" || (f === "signals" && a.kind === "signal") || (f === "results" && a.kind === "signal" && a.result));
+  return '<div class="hello">Tes alertes<small>Tout ce que le bot t\'a envoyé, avec le résultat en euros.</small></div>' +
+    '<div class="filters">' + [["all", "Tout"], ["signals", "Signaux"], ["results", "Résultats"]].map(([k, l]) => '<button data-filter="' + k + '" class="' + (f === k ? "on" : "") + '">' + l + "</button>").join("") + "</div>" +
+    (list.length ? list.map(alertRow).join("") : emptyAlerts());
+}
+
+function tabMarkets() {
+  const m = S.markets, u = S.me.user;
+  let html = '<div class="hello">Combien tu peux perdre ou gagner<small>Pour un signal sur chaque marché, avec <b>' + eur0(u.capital) + "</b> et <b>" + pct(u.riskPct) + "</b> de risque par trade.</small></div>";
+  if (!m || !m.markets || !m.markets.length) return html + '<div class="card empty"><div class="e">😴</div><b>Pas encore de données</b><p class="small" style="margin-top:6px">Le robot MT5 envoie les marchés toutes les 5 minutes quand il tourne.</p></div>';
+  if (!m.online && !S.demo) html += '<div class="warn" style="margin-bottom:12px">😴 Le robot est hors ligne (dernières données ' + ago(m.updated) + ").</div>";
+  html += m.markets.map((k) => {
+    const tr = k.dir === "up" ? '<span class="trend up">↗ Hausse</span>' : k.dir === "down" ? '<span class="trend down">↘ Baisse</span>' : '<span class="trend flat">→ Sans tendance</span>';
+    const money = k.ok
+      ? '<div class="tiles3"><div><small>📦 Volume</small><b class="num">' + esc(k.lot) + '</b></div><div class="l"><small>🔴 Si perdu</small><b>' + eur(-k.risk) + '</b></div><div class="g"><small>🟢 Si gagné</small><b>' + eur(k.gain, true) + "</b></div></div>"
+      : '<div class="skip">⛔ Capital trop petit pour ce marché' + (k.minCapital ? " : il faudrait environ <b>" + eur0(k.minCapital) + "</b>" : "") + ". Tu verras ses signaux, mais sans volume.</div>";
+    return '<div class="card mk' + (k.followed ? "" : " off") + '"><div class="mk-top"><div class="nm"><b>' + esc(k.sym) + "</b><small>" + esc(symName(k.sym)) + (k.px ? " · " + px(k.px, k.dg) : "") + "</small></div>" + tr + "</div>" +
+      money + (k.news ? '<p class="small gold" style="margin-top:10px">📰 Annonce importante : ' + esc(k.news) + "</p>" : "") +
+      '<div class="mk-foot"><span>Recevoir les alertes de ce marché</span><label class="sw"><input type="checkbox" data-market="' + esc(k.sym) + '"' + (k.followed ? " checked" : "") + "><i></i></label></div></div>";
+  }).join("");
+  return html + '<p class="note">💡 Ces montants bougent un peu à chaque signal selon l\'agitation du marché (le Stop Loss est plus large quand ça bouge beaucoup, donc le volume est plus petit). Ta perte maximum, elle, reste la même.<br>Mis à jour ' + ago(m.updated) + ".</p>";
+}
+
+function riskInfo(capital, riskPct, rr) {
+  const lose = capital * riskPct / 100;
+  const cls = riskPct <= 1 ? "ok" : riskPct < 2 ? "mid" : "high";
+  const word = riskPct <= 1 ? "✅ Prudent (conseillé)" : riskPct < 2 ? "⚠️ Plus risqué" : "🔥 Maximum autorisé";
+  return '<div class="riskbox ' + cls + '"><b>' + word + '</b><br>Par trade, tu risques au maximum <b class="red">' + eur(-lose) + '</b> et tu vises <b class="green">' + eur(lose * rr, true) + "</b>.<br>" +
+    '<span class="muted small">Même après 5 pertes de suite, il te resterait ' + eur0(Math.round(capital * Math.pow(1 - riskPct / 100, 5))) + ".</span></div>";
+}
+const parseCap = (v) => parseFloat(String(v).replace(/\s/g, "").replace(",", "."));
+
+function tabAccount() {
+  const u = S.me.user;
+  const rr = (S.me.robot && S.me.robot.rr) || 2;
+  const cap = S.form.capital != null ? S.form.capital : String(u.capital).replace(".", ",");
+  const risk = S.form.risk != null ? +S.form.risk : u.riskPct;
+  let html = '<div class="hello">Ton compte<small>' + esc(u.email) + '</small></div><div class="stack">';
+  html += '<div class="card"><h3>💼 Ton argent</h3>' +
+    field("name", "Prénom", { value: u.name }) +
+    field("capital", "Capital de trading", { value: cap, mode: "decimal", suf: "€", hint: "Mets-le à jour si ton compte MT5 grossit ou baisse." }) +
+    '<div class="field" style="margin-bottom:0"><span>Risque par trade : <b id="riskVal">' + pct(risk) + "</b></span>" +
+    '<input class="range" id="f_risk" type="range" min="0.25" max="2" step="0.25" value="' + risk + '"><div class="ticks"><span>0,25 %</span><span>1 %</span><span>2 %</span></div>' +
+    '<div id="riskInfo">' + riskInfo(parseCap(cap) || u.capital, risk, rr) + "</div></div>" +
+    '<div style="margin-top:14px">' + msgBox() + '</div><button class="btn" data-act="save"' + (S.busy ? " disabled" : "") + ">" + busy("Enregistrer") + "</button></div>";
+  html += u.telegram.linked
+    ? '<div class="card tone-blue"><h3>✈️ Telegram relié</h3><p class="muted small">Les alertes arrivent sur le Telegram de <b>' + esc(u.telegram.name || "ton compte") + "</b>.</p>" +
+      '<div class="row" style="margin-top:12px"><button class="btn small ghost" data-act="test">📨 Message test</button><button class="btn small line" data-act="relink">Changer de Telegram</button></div></div>'
+    : telegramCard(true);
+  html += '<div class="card"><h3>🔔 Alertes</h3><div class="setting"><div class="txt"><b>Recevoir les signaux</b><small>' + (u.paused ? "En pause : tu reçois seulement les résultats." : "Actif") + '</small></div><label class="sw"><input type="checkbox" data-act="pause"' + (u.paused ? "" : " checked") + "><i></i></label></div>" +
+    '<p class="dim small" style="margin-top:8px">🛡️ Protections : 2 % max par trade, 3 trades en cours max, stop automatique à −3 % par jour.</p></div>';
+  if (u.admin) html += adminCard();
+  html += '<div class="card"><h3>❓ Aide</h3>' +
+    "<details><summary>C'est quoi le Stop Loss et le Take Profit ?</summary><p>Le <b>Stop Loss (SL)</b> est le prix où MT5 ferme ton trade tout seul si ça tourne mal : c'est ta perte maximum. Le <b>Take Profit (TP)</b> est le prix où il le ferme en gain. Mets-les <b>toujours</b> quand tu ouvres un trade.</p></details>" +
+    "<details><summary>C'est quoi le volume (lot) ?</summary><p>La taille de ton trade. Plus il est gros, plus tu gagnes ou perds vite. L'appli le calcule pour que le Stop Loss te coûte au maximum " + pct(u.riskPct) + " de ton capital (" + eur(u.riskMoney) + ").</p></details>" +
+    "<details><summary>Comment passer l'ordre sur MT5 (téléphone) ?</summary><p>1. Ouvre MT5 › onglet <b>Cotations</b> › touche le marché (ex. EURUSD) › <b>Nouvel ordre</b>.<br>2. Mets le <b>volume</b> du signal.<br>3. Remplis <b>Stop Loss</b> et <b>Take Profit</b> avec les prix du signal.<br>4. Touche <b>BUY</b> pour un achat, <b>SELL</b> pour une vente.</p></details>" +
+    "<details><summary>Pourquoi « passe ton tour » ?</summary><p>Sur certains marchés (comme l'or), même le plus petit volume (0,01 lot) te ferait risquer trop d'argent pour ton capital. Pour ne pas cramer ton compte, l'appli te dit de ne pas le prendre.</p></details>" +
+    "<details><summary>Le bilan, c'est mon vrai argent ?</summary><p>Non : c'est ce que tu aurais gagné ou perdu <b>si tu as suivi tous les signaux</b> avec le volume conseillé. Ton vrai résultat est dans MT5.</p></details>" +
+    "<details><summary>Ça gagne à tous les coups ?</summary><p>Non. Il y aura des pertes. Le robot vise des gains 2 fois plus grands que les pertes, pour rester gagnant même en perdant plus d'une fois sur deux. Commence sur un <b>compte démo</b>.</p></details></div>";
+  html += '<button class="btn line" data-act="logout">Se déconnecter</button><button class="btn danger" data-act="delete">Supprimer mon compte</button>' +
+    '<p class="legal">AlertesPro · signaux automatiques, sans garantie de gain.<br>Pas un conseil en investissement. Le trading comporte un risque de perte en capital.</p></div>';
+  return html;
+}
+
+function inviteUrl(code) {
+  let u = location.origin + location.pathname + "#i=" + code;
+  if (API && API !== DEFAULT_API) u += "&s=" + encodeURIComponent(API);
+  return u;
+}
+function adminCard() {
+  const a = S.admin;
+  if (!a) return '<div class="card"><h3>👑 Famille et amis</h3><p class="muted small">Chargement…</p></div>';
+  const url = inviteUrl(a.invite);
+  return '<div class="card tone-violet"><h3>👑 Famille et amis</h3><p class="muted small">Tu es l\'administrateur. Envoie ce lien aux personnes que tu veux inviter :</p>' +
+    '<div class="code" style="font-size:14px;letter-spacing:0;word-break:break-all" data-copy="' + esc(url) + '" data-label="Lien d\'invitation">' + esc(url) + "</div>" +
+    '<div class="row" style="margin-top:8px"><button class="btn small" data-act="share">📤 Partager le lien</button><button class="btn small line" data-act="new-invite">Nouveau lien</button></div>' +
+    '<p class="dim small" style="margin-top:8px">Code d\'invitation : <b class="num">' + esc(a.invite) + "</b>. « Nouveau lien » rend l'ancien inutilisable.</p>" +
+    '<div style="margin-top:12px">' + a.members.map((m) => '<div class="member"><div class="av">' + esc((m.name || "?")[0].toUpperCase()) + '</div><div class="who"><b>' + esc(m.name) + (m.admin ? " 👑" : "") + "</b><small>" +
+      (m.telegram ? "✈️ Telegram relié" : "⚠️ Telegram pas relié") + " · " + eur0(m.capital) + " · " + m.trades + " trade" + (m.trades > 1 ? "s" : "") + "</small></div>" +
+      (m.admin ? "" : '<button data-act="remove" data-id="' + m.id + '" data-name="' + esc(m.name) + '">Retirer</button>') + "</div>").join("") + "</div>" +
+    '<p class="small" style="margin-top:12px">🤖 Robot : ' + (a.robot.online ? '<b class="green">en ligne</b>' : '<b class="red">hors ligne</b>') + (a.robot.lastSeen ? " · vu " + ago(a.robot.lastSeen) : " · jamais connecté") +
+    (a.robot.version ? " · v" + esc(a.robot.version) : "") + (a.robot.symbols && a.robot.symbols.length ? '<br><span class="dim">' + esc(a.robot.symbols.join(", ")) + " · " + esc(a.robot.tf) + "</span>" : "") + "</p></div>";
+}
+
+// ------------------------------------------------------------------ actions
+function readForm(id) {
+  const f = $("#" + id), o = {};
+  if (f) f.querySelectorAll("input").forEach((i) => { o[i.name] = i.type === "checkbox" ? i.checked : i.value; });
+  return o;
+}
+
+async function submit(kind) {
+  const f = readForm(kind);
+  Object.assign(S.form, f);
+  S.error = ""; S.msg = "";
+  try {
+    if (kind === "signup") {
+      if (!f.name.trim()) throw new Error("Écris ton prénom.");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email.trim())) throw new Error("Vérifie ton adresse e-mail.");
+      if (f.password.length < 8) throw new Error("Mot de passe trop court : 8 caractères minimum.");
+      const cap = parseCap(f.capital);
+      if (!(cap >= 50)) throw new Error("Indique ton capital (50 € minimum).");
+      if (!f.ok) throw new Error("Coche la case pour confirmer que tu as compris les risques.");
+      S.busy = true; render();
+      const j = await api("/api/signup", "POST", { name: f.name, email: f.email, password: f.password, capital: cap, invite: f.invite || LS.get("invite") || "" });
+      LS.set("invite", null);
+      return enter(j);
+    }
+    if (kind === "login") {
+      S.busy = true; render();
+      return enter(await api("/api/login", "POST", { email: f.email, password: f.password }));
+    }
+    if (kind === "forgot") {
+      S.busy = true; render();
+      if (S.forgotStep === 1) {
+        const j = await api("/api/forgot", "POST", { email: f.email });
+        S.forgotStep = 2; S.busy = false; S.msg = j.message || "Code envoyé.";
+        return render();
+      }
+      return enter(await api("/api/reset", "POST", { email: S.form.email, code: f.code, password: f.password }));
+    }
+  } catch (e) { S.error = e.message; }
+  S.busy = false; render();
+}
+async function enter(j) {
+  setMe(j); S.busy = false; S.form = {}; S.demo = false; S.alerts = []; S.markets = null;
+  go("main", "home"); startPolling(); await refresh();
+}
+
+async function act(name, el) {
+  try {
+    if (name === "demo") return startDemo();
+    if (name === "exit-demo") { S.demo = false; S.me = null; S.alerts = []; S.markets = null; if (API) loadInfo(); return go(API ? "signup" : "welcome"); }
+    if (name === "server") {
+      const v = prompt("Adresse du serveur AlertesPro (donnée par Claude) :", API || "https://");
+      if (v != null) { API = v.trim().replace(/\/+$/, ""); if (API === "https:" || API === "https://") API = ""; LS.set("api", API || null); S.info = null; render(); }
+      return;
+    }
+    if (name === "forgot") { S.forgotStep = 1; Object.assign(S.form, readForm("login")); return go("forgot"); }
+    if (name === "forgot-again") { S.forgotStep = 1; S.msg = ""; return render(); }
+    if (name === "eye") { const i = document.getElementById(el.dataset.for); i.type = i.type === "password" ? "text" : "password"; return; }
+    if (S.demo) { if (el.type === "checkbox") el.checked = !el.checked; return toast("👀 C'est l'exemple : crée ton compte pour de vrai"); }
+    if (name === "tg-open") { setTimeout(() => refresh(false), 8000); setTimeout(() => refresh(false), 20000); return; }
+    if (name === "check-tg") { await refresh(false); return toast(S.me.user.telegram.linked ? "✅ Telegram relié !" : "Pas encore relié : touche DÉMARRER dans Telegram"); }
+    if (name === "resume") { setMe(await api("/api/me", "PUT", { paused: false })); toast("▶️ Signaux relancés"); return render(); }
+    if (name === "pause") { setMe(await api("/api/me", "PUT", { paused: !el.checked })); toast(el.checked ? "🔔 Signaux activés" : "⏸️ Signaux en pause"); return render(); }
+    if (name === "save") {
+      S.busy = true; S.error = ""; S.msg = "";
+      const body = { name: $("#f_name").value, capital: parseCap($("#f_capital").value), riskPct: +$("#f_risk").value };
+      render();
+      try {
+        setMe(await api("/api/me", "PUT", body));
+        S.form = {}; toast("✅ Enregistré");
+        S.markets = await api("/api/markets");
+      } catch (e) { S.error = e.message; }
+      S.busy = false; return render();
+    }
+    if (name === "test") { await api("/api/me/test", "POST"); return toast("📨 Message envoyé sur ton Telegram"); }
+    if (name === "relink") { if (!confirm("Délier ce Telegram et créer un nouveau code ?")) return; setMe(await api("/api/me/relink", "POST")); return render(); }
+    if (name === "logout") return logout();
+    if (name === "delete") {
+      const p = prompt("Pour supprimer ton compte et tout ton historique, écris ton mot de passe :");
+      if (!p) return;
+      await api("/api/me/delete", "POST", { password: p });
+      toast("Compte supprimé"); return logout(true);
+    }
+    if (name === "share") {
+      const url = inviteUrl(S.admin.invite);
+      const text = "Rejoins-moi sur AlertesPro : les signaux de trading de mon robot MT5, calculés pour ton argent, sur Telegram 📈";
+      if (navigator.share) { try { await navigator.share({ title: "AlertesPro", text, url }); } catch (e) {} return; }
+      return copy(text + "\n" + url, "Lien d'invitation");
+    }
+    if (name === "new-invite") { if (!confirm("Créer un nouveau lien ? L'ancien ne marchera plus.")) return; S.admin = await api("/api/admin/invite", "POST"); return render(); }
+    if (name === "remove") {
+      if (!confirm("Retirer " + el.dataset.name + " ? Son compte et son historique seront supprimés.")) return;
+      S.admin = await api("/api/admin/remove", "POST", { id: +el.dataset.id }); toast(el.dataset.name + " a été retiré"); return render();
+    }
+  } catch (e) { S.busy = false; toast("⚠️ " + e.message); render(); }
+}
+
+async function toggleMarket(sym, on) {
+  if (S.demo) { toast("👀 C'est l'exemple : crée ton compte pour de vrai"); return render(); }
+  const all = S.markets.markets.map((m) => m.sym);
+  let cur = S.me.user.markets === "*" ? all.slice() : S.me.user.markets.slice();
+  cur = on ? [...new Set([...cur, sym])] : cur.filter((s) => s !== sym);
+  if (!cur.length) { toast("Garde au moins un marché"); return render(); }
+  const list = all.every((s) => cur.includes(s)) ? "*" : cur;
+  try {
+    setMe(await api("/api/me", "PUT", { markets: list }));
+    S.markets.markets.forEach((m) => { m.followed = list === "*" || list.includes(m.sym); });
+    toast(on ? "🔔 Alertes " + sym + " activées" : "🔕 Alertes " + sym + " coupées");
+  } catch (e) { toast("⚠️ " + e.message); }
+  render();
+}
+
+function bind() {
+  document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", (e) => { e.preventDefault(); loadInfo(); go(b.dataset.go); }));
+  document.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  document.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => { S.filter = b.dataset.filter; render(); }));
+  document.querySelectorAll("[data-act]").forEach((b) => {
+    b.addEventListener(b.tagName === "INPUT" ? "change" : "click", (e) => { if (b.tagName === "A" && b.dataset.act !== "tg-open") e.preventDefault(); act(b.dataset.act, b); });
+  });
+  document.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => { if (b.dataset.copy) copy(b.dataset.copy, b.dataset.label); }));
+  document.querySelectorAll("[data-market]").forEach((b) => b.addEventListener("change", () => toggleMarket(b.dataset.market, b.checked)));
+  ["signup", "login", "forgot"].forEach((id) => { const f = $("#" + id); if (f) f.addEventListener("submit", (e) => { e.preventDefault(); submit(id); }); });
+  const r = $("#f_risk"), c = $("#f_capital");
+  const upd = () => {
+    S.form.risk = r.value; S.form.capital = c.value;
+    $("#riskVal").textContent = pct(+r.value);
+    $("#riskInfo").innerHTML = riskInfo(parseCap(c.value) || 0, +r.value, (S.me.robot && S.me.robot.rr) || 2);
   };
-  const icon = (k) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[k] || ICONS.info) + "</svg>";
-  const empty = (title, txt) => '<div class="card empty">' + icon("inbox") + "<b>" + esc(title) + "</b>" + esc(txt) + "</div>";
+  if (r && c && S.view === "main") { r.addEventListener("input", upd); c.addEventListener("input", upd); }
+  document.querySelectorAll("[data-left]").forEach((el) => { el.textContent = leftTxt(+el.dataset.left - nowS()); });
+}
 
-  // ---------- Données ----------
-  const all = () => S.msgs.map(parse).sort((a, b) => b.time - a.time);
-  const lastStatus = () => all().find((m) => m.kind === "status");
-  const statuses = () => all().filter((m) => m.kind === "status").reverse(); // du plus ancien au plus récent
-  const results = () => all().filter((m) => m.kind === "result");
-  const resultBySid = () => { const map = {}; results().forEach((r) => { if (r.d.sid) map[r.d.sid] = r; }); return map; };
-  const MAX_STATUS = 96; // 24 h d'historique à raison d'un statut toutes les 15 min
+async function loadInfo() {
+  if (!API || S.info) return;
+  try { S.info = await api("/api/info"); if (S.view === "signup") render(); } catch (e) {}
+}
 
-  function addMessages(list, live) {
-    const known = new Set(S.msgs.map((m) => m.id));
-    const fresh = list.filter((m) => m && m.id && !known.has(m.id));
-    if (!fresh.length) return;
-    S.msgs = S.msgs.concat(fresh).sort((a, b) => a.time - b.time);
-    // on garde les derniers statuts (mini-graphiques) et les MAX_MSG derniers autres messages
-    const isStatus = (m) => (m.tags || []).includes("k=status");
-    const keep = new Set(S.msgs.filter(isStatus).slice(-MAX_STATUS).map((m) => m.id));
-    const others = S.msgs.filter((m) => !isStatus(m)).slice(-MAX_MSG);
-    const keepOthers = new Set(others.map((m) => m.id));
-    S.msgs = S.msgs.filter((m) => keep.has(m.id) || keepOthers.has(m.id));
-    if (!S.demo) store.set("msgs", S.msgs);
-    if (live) fresh.map(parse).filter((m) => m.kind !== "status").forEach(alertUser);
+// ------------------------------------------------------------------ démarrage
+(async function start() {
+  if (S.token && API) {
+    S.view = "main"; render(); startPolling();
+    await refresh();
+    if (!S.me) { S.view = "welcome"; render(); }
+  } else {
+    if (LS.get("invite") && API) { S.view = "signup"; loadInfo(); }
     render();
   }
-
-  function alertUser(m) {
-    if (S.sound && (m.kind === "signal" || m.kind === "result" || m.kind === "pre")) beep();
-    if (S.notif && document.hidden && "Notification" in window && Notification.permission === "granted") {
-      try { new Notification(m.title || "AlertesPro", { body: m.message.slice(0, 180), icon: "icon-180.png", tag: m.id }); } catch (e) {}
-    }
-  }
-
-  let audio;
-  function beep() {
-    try {
-      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-      [0, 0.16].forEach((dt, i) => {
-        const o = audio.createOscillator(), g = audio.createGain();
-        o.frequency.value = i ? 1046 : 784; o.type = "sine";
-        g.gain.setValueAtTime(0.0001, audio.currentTime + dt);
-        g.gain.exponentialRampToValueAtTime(0.18, audio.currentTime + dt + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + dt + 0.22);
-        o.connect(g).connect(audio.destination); o.start(audio.currentTime + dt); o.stop(audio.currentTime + dt + 0.25);
-      });
-    } catch (e) {}
-  }
-
-  // ---------- Connexion au relais ----------
-  let es = null, retry = 0, retryT = null;
-
-  function setConn(state) {
-    S.conn = state;
-    const el = $("conn");
-    el.className = "conn " + state;
-    $("connTxt").textContent = { live: "En direct", demo: "Démo", off: S.code ? "Hors ligne" : "Non connecté", wait: "Connexion…" }[state];
-  }
-
-  async function poll() {
-    if (!S.code) return;
-    const lastId = S.msgs.length ? S.msgs[S.msgs.length - 1].id : null;
-    const since = lastId || "12h";
-    const r = await fetch(RELAY + "/" + encodeURIComponent(S.code) + "/json?poll=1&since=" + encodeURIComponent(since));
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const txt = await r.text();
-    const list = txt.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch (e) { return null; } })
-      .filter((m) => m && m.event === "message");
-    addMessages(list, false);
-  }
-
-  function connect() {
-    if (es) { es.close(); es = null; }
-    clearTimeout(retryT);
-    if (S.demo) { setConn("demo"); return; }
-    if (!S.code) { setConn("off"); return; }
-    setConn("wait");
-    poll().catch(() => {}).finally(() => {
-      if (S.demo || !S.code) return;
-      try {
-        es = new EventSource(RELAY + "/" + encodeURIComponent(S.code) + "/sse");
-        es.onopen = () => { retry = 0; setConn("live"); };
-        es.onmessage = (e) => { try { const m = JSON.parse(e.data); if (m.event === "message") addMessages([m], true); } catch (x) {} };
-        es.onerror = () => {
-          setConn("off"); es.close(); es = null;
-          retryT = setTimeout(connect, Math.min(30000, 2000 * Math.pow(2, retry++)));
-        };
-      } catch (e) { setConn("off"); }
-    });
-  }
-
-  async function sendTest() {
-    if (S.demo) return toast("Désactive le mode démo pour tester.");
-    if (!S.code) return toast("Crée ou colle d'abord un code.");
-    try {
-      const r = await fetch(RELAY + "/", { method: "POST", body: JSON.stringify({
-        topic: S.code, title: "Test de l'appli", message: "La connexion fonctionne. Les alertes du robot apparaîtront ici.", tags: ["k=info"], priority: 2 }) });
-      toast(r.ok ? "Message envoyé, il arrive dans Alertes." : "Échec de l'envoi (" + r.status + ")");
-    } catch (e) { toast("Pas de connexion internet ?"); }
-  }
-
-  // ---------- Rendus ----------
-  function renderHero() {
-    const st = lastStatus();
-    if (!st) {
-      $("hero").innerHTML = '<div class="hero"><div class="lbl">Équité</div><div class="big num">–</div>' +
-        '<div class="updated">En attente des données du robot. Elles arrivent toutes les 15 min une fois le robot connecté.</div></div>';
-      return;
-    }
-    const d = st.d, cur = d.cur || "", day = num(d.day), bal = num(d.bal), eq = num(d.eq), ml = num(d.ml);
-    const pct = eq - day > 0 ? day / (eq - day) * 100 : NaN;
-    const dayCls = day >= 0 ? "up" : "down";
-    $("hero").innerHTML =
-      '<div class="hero"><div class="lbl">Équité</div>' +
-      '<div class="big num">' + fmt(eq) + ' <span style="font-size:18px;color:var(--muted)">' + esc(cur) + "</span></div>" +
-      '<div class="day ' + dayCls + '"><span class="num">' + money(day, cur) + "</span>" + (isFinite(pct) ? '<span class="num" style="opacity:.8">(' + (pct > 0 ? "+" : "") + fmt(pct, 1) + " %)</span>" : "") + " aujourd'hui</div>" +
-      '<div class="kpis"><div class="kpi"><span>Solde</span><b class="num">' + fmt(bal, 0) + "</b></div>" +
-      '<div class="kpi"><span>Marge</span><b class="num' + (ml > 0 && ml < 300 ? " down" : "") + '">' + (ml > 0 ? fmt(ml, 0) + " %" : "–") + "</b></div>" +
-      '<div class="kpi"><span>Positions</span><b class="num">' + esc(d.pos || 0) + "</b></div></div>" +
-      '<div class="updated">Mis à jour ' + ago(st.time) + " · risque " + esc(d.risk || "1") + " % par trade · " + esc(d.tf || "") + "</div></div>";
-  }
-
-  function marketPrice(sym) {
-    const st = lastStatus(); if (!st) return null;
-    const row = st.d.m.find((r) => (r[0] || "").toUpperCase() === sym.toUpperCase());
-    return row ? num(row[4]) : null;
-  }
-
-  const TF_HOURS = { M15: 0.25, M30: 0.5, H1: 1, H2: 2, H4: 4, D1: 24 };
-
-  // état d'un signal : résultat connu, en cours, ou inconnu
-  function signalState(m, ctx) {
-    const d = m.d;
-    const r = d.sid && ctx.res[d.sid];
-    if (r) {
-      const rv = num(r.d.r), res = (r.d.res || "").toLowerCase();
-      const txt = res === "tp" ? "TP touché" : res === "sl" ? "SL touché" : "Expiré";
-      return { done: true, res: res === "tp" || res === "sl" ? res : "exp", r: rv, html: '<span class="res ' + (res === "tp" ? "tp" : res === "sl" ? "sl" : "exp") + '">' + (res === "tp" ? "✓ " : res === "sl" ? "✕ " : "⌛ ") + txt + ' <span class="num">' + (rv > 0 ? "+" : "") + fmt(rv) + " R</span></span>" };
-    }
-    const life = (num(d.exp) || 48) * (TF_HOURS[(d.tf || "H1").toUpperCase()] || 1) * 3600;
-    const open = d.sid && ctx.open.has(d.sid);
-    if (open || (d.sid && Date.now() / 1000 - m.time < life)) return { done: false, html: '<span class="res open">● En cours</span>' };
-    return { done: false, html: "" };
-  }
-
-  function signalCard(m, compact, ctx) {
-    ctx = ctx || signalCtx();
-    const d = m.d, buy = (d.side || "").toLowerCase() === "buy", side = buy ? "buy" : "sell";
-    const sym = (d.sym || "").toUpperCase(), rr = num(d.rr) || 2;
-    const entry = num(d.entry), sl = num(d.sl), tp = num(d.tp), dg = Math.max(decimals(d.entry), decimals(d.sl));
-    const lines = m.message.split("\n");
-    const reason = d.rs ? d.rs.replace(/;/g, ",") : (lines[1] || "");
-    const cur = d.cur || "", lot = num(d.lot) > 0 ? d.lot : "";
-    const isNew = Date.now() / 1000 - m.time < 3600;
-    const state = signalState(m, ctx);
-    const price = marketPrice(sym);
-    let mark = "", progress = "";
-    if (!state.done && price && isFinite(sl) && isFinite(tp) && tp !== sl && Date.now() / 1000 - m.time < 3 * 86400) {
-      const pos = buy ? (price - sl) / (tp - sl) : (sl - price) / (sl - tp);
-      const c = Math.max(0, Math.min(1, pos));
-      mark = '<i class="mark" style="left:' + (c * 100).toFixed(1) + '%"></i>';
-      const toTp = buy ? (price - entry) / (tp - entry) : (entry - price) / (entry - tp);
-      const pctTxt = toTp >= 0 ? fmt(Math.min(toTp, 1) * 100, 0) + " % vers le TP" : fmt(Math.min(-toTp * rr, 1) * 100, 0) + " % vers le SL";
-      progress = '<span class="chip ' + (toTp >= 0 ? "ok" : "warn") + '">Prix actuel <span class="num">' + price.toFixed(dg) + "</span> · " + pctTxt + "</span>";
-    }
-    const lotTxt = lot ? '<span class="chip">Lot <b class="num">' + esc(lot) + '</b></span><span class="chip">Perte si SL <b class="num down">-' + fmt(num(d.risk)) + " " + esc(cur) + "</b></span>" +
-        '<span class="chip">Gain si TP <b class="num up">+' + fmt(num(d.risk) * rr) + " " + esc(cur) + "</b></span>"
-      : '<span class="chip warn">Lot minimum trop gros : ne prends pas ce trade</span>';
-    const vu = num(d.vu), fresh = isFinite(vu) && Date.now() / 1000 < vu;
-    const validChip = state.done || !isFinite(vu) ? "" : fresh ? '<span class="chip ok">À prendre avant ' + hhmm(vu) + "</span>" : '<span class="chip warn">Trop tard pour entrer</span>';
-    const how = state.done || !lot ? "" : '<details class="how"' + (fresh ? " open" : "") + "><summary>Comment passer l'ordre dans MT5</summary><ol class=\"steps\">" +
-      "<li>Ouvre MT5 › <b>Cotations</b> › touche <b>" + esc(sym) + "</b> › <b>Nouvel ordre</b></li>" +
-      "<li><b>Exécution au marché</b>, volume <b class=\"num\">" + esc(lot) + "</b></li>" +
-      "<li>Stop Loss : <b class=\"num down\">" + esc(d.sl) + "</b></li>" +
-      "<li>Take Profit : <b class=\"num up\">" + esc(d.tp) + "</b></li>" +
-      "<li>Touche <b>" + (buy ? "ACHETER (Buy)" : "VENDRE (Sell)") + "</b></li></ol>" +
-      (d.lim ? '<p class="dim" style="font-size:12.5px">' + (buy ? "N'achète pas si le prix est déjà au-dessus de " : "Ne vends pas si le prix est déjà en dessous de ") + '<b class="num">' + esc(d.lim) + "</b> : le signal est passé. Ne déplace jamais ton Stop Loss.</p>" : "") + "</details>";
-    const newsWarn = /Attention annonce/.test(m.message) ? '<span class="chip warn">Annonce proche</span>' : "";
-    const lv = (cls, lbl, val, sub) => '<button class="lv ' + cls + '" data-copy="' + esc(val) + '"><span>' + lbl + "</span><b class=\"num\">" + esc(val) + "</b>" + (sub ? "<i>" + sub + "</i>" : "") + "</button>";
-    const order = (buy ? "ACHAT " : "VENTE ") + sym + (num(d.lot) > 0 ? " " + d.lot + " lot" : "") + " | SL " + (d.sl || "") + " | TP " + (d.tp || "");
-    const copyOrder = state.done ? "" : '<button class="mini-btn" data-copy="' + esc(order) + '">' + icon("copy").replace("<svg ", '<svg style="width:14px;height:14px" ') + "Copier l'ordre</button>";
-    return '<article class="sig ' + side + (state.done ? " done" : "") + '">' +
-      '<div class="sig-head"><span class="badge ' + side + '">' + (buy ? "ACHAT" : "VENTE") + '</span><span class="sig-sym">' + esc(sym) + '</span><span class="tf">' + esc(d.tf || "") + "</span>" +
-      '<span class="ago">' + ago(m.time) + "</span>" + (isNew && !state.done ? '<span class="new">NOUVEAU</span>' : "") + "</div>" +
-      (state.html ? '<div style="margin-top:10px">' + state.html + "</div>" : "") +
-      '<p class="reason">' + esc(reason) + "</p>" +
-      '<div class="levels">' + lv("", "ENTRÉE", d.entry, "") + lv("sl", "STOP", d.sl, esc(d.slp || "") + " pips") + lv("tp", "OBJECTIF", d.tp, esc(d.tpp || "") + " pips") + "</div>" + '<p class="copy-hint">Touche un prix pour le copier.</p>' +
-      (compact ? "" : '<div class="rr"><div class="r" style="flex:1"></div><div class="g" style="flex:' + rr + '"></div>' + mark + "</div>" +
-      '<div class="rr-lbl"><span>SL</span><span>Entrée</span><span>TP · ratio 1:' + fmt(rr, rr % 1 ? 1 : 0) + "</span></div>") +
-      '<div class="sig-foot">' + validChip + lotTxt + newsWarn + progress + copyOrder + "</div>" + how + "</article>";
-  }
-
-  function signalCtx() {
-    const st = lastStatus();
-    return { res: resultBySid(), open: new Set(st ? st.d.o.map((o) => o[0]) : []) };
-  }
-
-  function renderSignals() {
-    const ctx = signalCtx();
-    const sigs = all().filter((m) => m.kind === "signal");
-    const syms = [...new Set(sigs.map((m) => (m.d.sym || "").toUpperCase()))];
-    const f = S.sigFilter;
-    $("sigFilters").innerHTML = ["all", "buy", "sell"].concat(syms).map((k) =>
-      '<button data-sf="' + esc(k) + '" class="' + (f === k ? "on" : "") + '">' + esc({ all: "Tous", buy: "Achats", sell: "Ventes" }[k] || k) + "</button>").join("");
-    const list = sigs.filter((m) => f === "all" || (f === "buy" || f === "sell" ? (m.d.side || "").toLowerCase() === f : (m.d.sym || "").toUpperCase() === f));
-    $("sigCount").textContent = sigs.length ? sigs.length + " signal" + (sigs.length > 1 ? "s" : "") : "";
-    $("sigList").innerHTML = list.length ? list.map((m) => signalCard(m, false, ctx)).join("")
-      : empty("Aucun signal pour l'instant", "Le robot n'envoie un signal que si tendance, déclencheur, calendrier et spread sont bons. C'est normal d'attendre.");
-    $("lastSignal").innerHTML = sigs.length ? signalCard(sigs[0], false, ctx) : empty("Pas encore de signal", "Ils apparaîtront ici dès que le robot en trouve un.");
-  }
-
-  // ---------- Performance ----------
-  function perfData() {
-    const st = lastStatus();
-    const local = results().slice().reverse(); // du plus ancien au plus récent
-    let n, wins, sumR, gw, gl;
-    if (st && st.d.st) { // chiffres officiels du robot (tous les signaux depuis le début)
-      [n, wins, sumR, gw, gl] = st.d.st.split("|").map(num);
-    } else {
-      const rs = local.map((r) => num(r.d.r)).filter(isFinite);
-      n = rs.length; wins = rs.filter((x) => x > 0).length; sumR = rs.reduce((a, b) => a + b, 0);
-      gw = rs.filter((x) => x > 0).reduce((a, b) => a + b, 0); gl = -rs.filter((x) => x <= 0).reduce((a, b) => a + b, 0);
-    }
-    let streak = 0, worst = 0;
-    local.forEach((r) => { if (num(r.d.r) <= 0) { streak++; worst = Math.max(worst, streak); } else streak = 0; });
-    const bySym = {};
-    local.forEach((r) => { const s = (r.d.sym || "?").toUpperCase(); bySym[s] = bySym[s] || [0, 0]; bySym[s][0]++; bySym[s][1] += num(r.d.r) || 0; });
-    return { n: n || 0, wins: wins || 0, sumR: sumR || 0, pf: gl > 0 ? gw / gl : null, worst, local, bySym, open: st ? st.d.o.length : 0 };
-  }
-
-  function curveSvg(values) {
-    if (values.length < 2) return "";
-    const pts = [0].concat(values), W = 300, H = 90, pad = 6;
-    let c = 0; const cum = pts.map((v, i) => (c += i ? v : 0));
-    const lo = Math.min(0, ...cum), hi = Math.max(0, ...cum), span = hi - lo || 1;
-    const x = (i) => pad + i * (W - 2 * pad) / (cum.length - 1), y = (v) => H - pad - (v - lo) * (H - 2 * pad) / span;
-    const line = cum.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1)).join(" ");
-    const col = cum[cum.length - 1] >= 0 ? "var(--buy)" : "var(--sell)";
-    return '<svg class="curve" viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" role="img" aria-label="Résultat cumulé en R">' +
-      '<line x1="0" x2="' + W + '" y1="' + y(0).toFixed(1) + '" y2="' + y(0).toFixed(1) + '" stroke="rgba(255,255,255,.15)" stroke-dasharray="3 4"/>' +
-      '<path d="' + line + " L" + x(cum.length - 1).toFixed(1) + " " + y(0).toFixed(1) + " L" + x(0).toFixed(1) + " " + y(0).toFixed(1) + 'Z" fill="' + col + '" opacity=".12"/>' +
-      '<path d="' + line + '" fill="none" stroke="' + col + '" stroke-width="2.2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>';
-  }
-
-  function renderPerf() {
-    const p = perfData();
-    if (!p.n) {
-      const txt = p.open ? p.open + " signal" + (p.open > 1 ? "s" : "") + " en cours. Le bilan apparaît dès que le premier touche son TP ou son SL."
-        : "Le robot suit chaque signal jusqu'au TP, au SL ou à l'expiration. Ton bilan apparaîtra ici.";
-      $("perfFull").innerHTML = empty("Pas encore de résultat", txt);
-      $("perfHome").innerHTML = "";
-      return;
-    }
-    const rate = p.n ? p.wins / p.n * 100 : 0, cls = p.sumR >= 0 ? "up" : "down";
-    const stats = '<div class="stats"><div class="stat"><span>Signaux</span><b class="num">' + p.n + '</b></div>' +
-      '<div class="stat"><span>Gagnants</span><b class="num">' + fmt(rate, 0) + ' %</b></div>' +
-      '<div class="stat"><span>Moyenne</span><b class="num ' + cls + '">' + (p.sumR > 0 ? "+" : "") + fmt(p.sumR / p.n) + ' R</b></div>' +
-      '<div class="stat"><span>Fact. profit</span><b class="num">' + (p.pf ? fmt(p.pf) : "–") + "</b></div></div>";
-    const head = '<div class="perf-head"><div><div class="perf-sub">Résultat total</div><div class="perf-big num ' + cls + '">' + (p.sumR > 0 ? "+" : "") + fmt(p.sumR, 1) + ' R</div></div>' +
-      '<div style="text-align:right"><div class="perf-sub">En cours</div><div class="num" style="font-size:18px;font-weight:600">' + p.open + "</div></div></div>";
-    const syms = Object.keys(p.bySym).sort().map((s) => { const [k, r] = p.bySym[s]; return '<span class="chip"><b>' + esc(s) + '</b><span class="num ' + (r >= 0 ? "up" : "down") + '">' + (r > 0 ? "+" : "") + fmt(r, 1) + " R</span><span class=\"dim\">(" + k + ")</span></span>"; }).join("");
-    const riskPct = num((lastStatus() || { d: {} }).d.risk) || 1;
-    $("perfFull").innerHTML = '<div class="card">' + head + stats + curveSvg(p.local.map((r) => num(r.d.r) || 0)) +
-      (syms ? '<div class="persym">' + syms + "</div>" : "") +
-      '<p class="perf-note">1 R = le montant risqué par signal (' + fmt(riskPct, 1) + " % du compte). Si tu avais pris tous les signaux : " + (p.sumR >= 0 ? "+" : "") + fmt(p.sumR * riskPct, 1) + " % du compte environ." +
-      (p.worst ? " Pire série : " + p.worst + " perte" + (p.worst > 1 ? "s" : "") + " d'affilée." : "") + (p.n < 30 ? " Moins de 30 signaux : bilan encore peu fiable." : "") + "</p></div>";
-    $("perfHome").innerHTML = '<div class="sec-title"><h2>Performance des signaux</h2><button data-go="signals">Détails</button></div>' +
-      '<div class="card">' + head + stats + "</div>";
-  }
-
-  function renderMarkets() {
-    const st = lastStatus();
-    $("mkTf").textContent = st && st.d.tf ? "Unité de temps " + st.d.tf : "";
-    if (!st || !st.d.m.length) {
-      $("mkList").innerHTML = empty("Pas de données marché", "Le robot envoie l'état des marchés toutes les 15 minutes.");
-    } else {
-      const hist = statuses();
-      $("mkList").innerHTML = '<div class="mk-grid">' + st.d.m.map((r) => {
-        const [sym, dir, rsi, atr, px, news] = r, rv = num(rsi);
-        const t = dir === "up" ? '<span class="trend up">▲ Hausse</span>' : dir === "down" ? '<span class="trend down">▼ Baisse</span>' : '<span class="trend flat">–</span>';
-        const zone = rv >= 70 ? "Surachat" : rv <= 30 ? "Survente" : "Neutre";
-        const series = hist.map((h) => { const row = h.d.m.find((x) => (x[0] || "").toUpperCase() === (sym || "").toUpperCase()); return row ? num(row[4]) : NaN; }).filter(isFinite);
-        let spark = "", chg = "";
-        if (series.length >= 3) {
-          const lo = Math.min(...series), hi = Math.max(...series), span = hi - lo || 1, W = 120, H = 34;
-          const pts = series.map((v, i) => (i * W / (series.length - 1)).toFixed(1) + "," + (H - 3 - (v - lo) * (H - 6) / span).toFixed(1)).join(" ");
-          const upMove = series[series.length - 1] >= series[0];
-          spark = '<svg class="spark" viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" aria-hidden="true"><polyline points="' + pts + '" fill="none" stroke="' + (upMove ? "var(--buy)" : "var(--sell)") + '" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>';
-          const pct = (series[series.length - 1] - series[0]) / series[0] * 100;
-          chg = '<span class="mk-chg ' + (pct >= 0 ? "up" : "down") + '">' + (pct >= 0 ? "+" : "") + fmt(pct, 2) + " %</span>";
-        }
-        return '<div class="mk"><div class="mk-top"><span class="mk-sym">' + esc(sym) + "</span>" + t + "</div>" +
-          '<div class="mk-px num" style="display:flex;align-items:baseline;justify-content:space-between;gap:6px">' + esc(px || "–") + chg + "</div>" + spark +
-          '<div class="gauge" title="RSI"><i style="left:' + Math.max(0, Math.min(100, rv || 50)) + '%"></i></div>' +
-          '<div class="mk-meta"><span>RSI <b class="num" style="color:var(--text)">' + fmt(rv, 0) + "</b> · " + zone + "</span>" +
-          (news === "1" ? '<span class="newsflag">● Annonce</span>' : "<span>ATR " + fmt(num(atr), 0) + " p</span>") + "</div></div>";
-      }).join("") + "</div>";
-    }
-    const sum = all().find((m) => m.kind === "summary");
-    $("summary").innerHTML = sum ? '<div class="card"><div class="it-title" style="margin-bottom:8px"><span>' + esc(sum.title) + "</span><time>" + ago(sum.time) + '</time></div><div class="it-text num" style="font-size:13px;line-height:1.7">' + esc(sum.message.split("\n").slice(1).join("\n")) + "</div></div>"
-      : empty("Pas encore de résumé", "Il arrive chaque matin de semaine à 8 h.");
-  }
-
-  function renderPositions() {
-    const st = lastStatus();
-    if (!st || !st.d.p.length) { $("posWrap").innerHTML = ""; return; }
-    const cur = st.d.cur || "";
-    $("posWrap").innerHTML = '<div class="sec-title"><h2>Positions ouvertes</h2><span class="muted" style="font-size:12.5px">' + ago(st.time) + "</span></div>" +
-      '<div class="card" style="padding:4px 0">' + st.d.p.map(([sym, side, vol, pl, hasSl]) => {
-        const v = num(pl);
-        return '<div class="pos"><span class="badge ' + (side === "buy" ? "buy" : "sell") + '">' + (side === "buy" ? "ACHAT" : "VENTE") + "</span>" +
-          '<div><div class="s">' + esc(sym) + '</div><div class="v num">' + esc(vol) + " lot " + (hasSl === "1" ? "" : '<span class="nosl">· SANS STOP</span>') + "</div></div>" +
-          '<div class="pl num ' + (v >= 0 ? "up" : "down") + '">' + money(v, cur) + "</div></div>";
-      }).join("") + "</div>";
-  }
-
-  function renderNews() {
-    const now = Date.now() / 1000;
-    const items = all().filter((m) => m.kind === "news").map((m) => ({ m, at: m.time + (num(m.d.min) || 0) * 60 }))
-      .filter((x) => x.at > now - 3600).sort((a, b) => a.at - b.at);
-    $("newsList").innerHTML = items.length ? '<div class="feed">' + items.map(({ m, at }) => {
-      const mins = Math.round((at - now) / 60);
-      const when = mins > 0 ? "dans " + mins + " min" : mins > -5 ? "maintenant" : "il y a " + -mins + " min";
-      return '<div class="it"><div class="ic news">' + icon("news") + '</div><div class="it-body"><div class="it-title"><span>' + esc((m.title.split(" : ")[1] || m.title)) + "</span><time>" + hhmm(at) + '</time></div><div class="it-text">' + esc(m.d.cur || "") + " · " + when + "</div></div></div>";
-    }).join("") + "</div>" : '<div class="card" style="display:flex;gap:12px;align-items:center"><div class="ic news">' + icon("news") + '</div><div class="muted" style="font-size:13.5px">Aucune annonce forte dans les prochaines 30 min. Le robot te prévient avant chacune.</div></div>';
-  }
-
-  const FEED_KINDS = { all: "Tout", pre: "Pré-alertes", signal: "Signaux", result: "Résultats", news: "Annonces", trade: "Positions", account: "Compte", line: "Lignes", market: "Marché", summary: "Résumés", info: "Infos" };
-  function renderFeed() {
-    const msgs = all().filter((m) => m.kind !== "status");
-    const present = new Set(msgs.map((m) => m.kind));
-    $("feedFilters").innerHTML = Object.keys(FEED_KINDS).filter((k) => k === "all" || present.has(k)).map((k) =>
-      '<button data-ff="' + k + '" class="' + (S.feedFilter === k ? "on" : "") + '">' + FEED_KINDS[k] + "</button>").join("");
-    const list = msgs.filter((m) => S.feedFilter === "all" || m.kind === S.feedFilter);
-    $("feed").innerHTML = list.length ? list.map((m) => {
-      const loss = (m.kind === "trade" && num(m.d.profit) < 0) || (m.kind === "result" && num(m.d.r) <= 0);
-      const body = m.message.split("\n").slice(m.message.indexOf("\n") > 0 ? 1 : 0).filter((l) => !/^-{5,}$/.test(l.trim())).join("\n");
-      const text = body === m.title ? "" : body;
-      return '<div class="it"><div class="ic ' + esc(m.kind) + (loss ? " loss" : "") + '">' + icon(m.kind) + '</div><div class="it-body"><div class="it-title"><span>' + esc(m.title) + "</span><time>" + hhmm(m.time) + "</time></div>" +
-        (text ? '<div class="it-text">' + esc(text) + "</div>" : "") + "</div></div>";
-    }).join("") : empty("Rien pour le moment", S.code || S.demo ? "Les alertes du robot s'afficheront ici en direct." : "Connecte le robot dans Réglages.");
-  }
-
-  function renderBanner() {
-    $("setupBanner").innerHTML = S.demo
-      ? '<div class="banner"><div class="ic news">' + icon("info") + '</div><p><b>Mode démo</b><br>Ces signaux sont des exemples, pas des vrais. Les vrais arrivent quand ton robot MT5 est connecté.</p><button class="btn" data-go="settings">Connecter</button></div>'
-      : !S.code
-      ? '<div class="banner"><div class="ic news">' + icon("info") + '</div><p><b>Connecte ton robot</b><br>Crée ton code dans Réglages, ou essaie le mode démo.</p><button class="btn" data-go="settings">Régler</button></div>' : "";
-  }
-
-  // pré-alertes encore valables (pas encore suivies d'un signal ou d'une annulation)
-  function pendingPre() {
-    const now = Date.now() / 1000, msgs = all();
-    const same = (a, b) => (a.d.sym || "").toUpperCase() === (b.d.sym || "").toUpperCase();
-    return msgs.filter((m) => m.kind === "pre" && (m.d.ev || "pre") === "pre" && now - m.time < 900)
-      .filter((p) => now < (num(p.d.at) || p.time + 60) + 120)
-      .filter((p) => !msgs.some((x) => x.id !== p.id && x.time >= p.time && same(x, p) && (x.kind === "signal" || (x.kind === "pre" && x.d.ev === "cancel"))));
-  }
-
-  function renderPre() {
-    $("preWrap").innerHTML = pendingPre().map((p) => {
-      const buy = (p.d.side || "").toLowerCase() === "buy", sym = (p.d.sym || "").toUpperCase();
-      const at = num(p.d.at) || p.time + 60, left = Math.round(at - Date.now() / 1000);
-      const when = left > 0 ? "dans " + (left >= 90 ? Math.round(left / 60) + " min" : left + " s") : "d'un instant à l'autre";
-      return '<div class="pre-card">' + icon("pre") + "<div><b>Prépare-toi : " + (buy ? "ACHAT " : "VENTE ") + esc(sym) + "</b>" +
-        "<p>Signal possible à <b class=\"num\" style=\"display:inline;font-size:inherit\">" + hhmm(at) + "</b> (" + when + "). Ouvre MT5 sur " + esc(sym) + " maintenant.</p>" +
-        '<p class="muted">Attends la confirmation avec l\'entrée, le Stop Loss et le Take Profit avant d\'entrer.</p></div></div>';
-    }).join("");
-  }
-
-  function renderHow() {
-    const hasSignal = all().some((m) => m.kind === "signal");
-    $("howWrap").innerHTML = (S.demo || !hasSignal)
-      ? '<div class="sec-title" style="margin-top:4px"><h2>Comment ça marche</h2></div><div class="card"><ol class="steps">' +
-        "<li><b>⏳ Pré-alerte, 1 min avant</b> : un signal se prépare. Ouvre MT5 sur le marché indiqué.</li>" +
-        "<li><b>🟢 Signal ACHAT ou 🔴 VENTE</b> : tu reçois l'entrée, le Stop Loss, le Take Profit et le lot. Passe l'ordre tout de suite, avant l'heure indiquée.</li>" +
-        "<li><b>✅ Résultat</b> : je te préviens quand le Take Profit ou le Stop Loss est touché.</li></ol>" +
-        '<p class="dim" style="font-size:12.5px">Personne ne peut connaître le marché à l\'avance : un signal est une probabilité, pas une certitude. C\'est pour ça qu\'il y a toujours un Stop Loss.</p></div>'
-      : "";
-  }
-
-  function renderBadges() {
-    const msgs = all();
-    const sigNew = msgs.filter((m) => m.kind === "signal" && m.time > S.seen.signals).length;
-    const feedNew = msgs.filter((m) => m.kind !== "status" && m.time > S.seen.feed).length;
-    const sb = $("sigBadge"), fb = $("feedBadge");
-    sb.hidden = !sigNew || S.view === "signals"; sb.textContent = sigNew > 9 ? "9+" : sigNew;
-    fb.hidden = !feedNew || S.view === "feed"; fb.textContent = feedNew > 9 ? "9+" : feedNew;
-  }
-
-  const RULES = ["Toujours un stop loss, placé dès l'entrée. Ne jamais le reculer.", "1 % de risque par trade, 2 % au grand maximum.",
-    "Après 3 % de perte dans la journée, on arrête jusqu'au lendemain.", "Pas d'entrée juste avant une annonce forte.",
-    "Pas deux positions sur la même devise dans le même sens.", "Un signal n'est pas une obligation : si le graphique ne te plaît pas, passe ton tour."];
-
-  function render() {
-    renderBanner(); renderPre(); renderHow(); renderHero(); renderPerf(); renderSignals(); renderPositions(); renderNews(); renderMarkets(); renderFeed(); renderBadges();
-  }
-
-  // ---------- Calculatrice ----------
-  function calc() {
-    const capV = num($("cCap").value), r = num($("cRisk").value), sl = num($("cSl").value), pip = num($("cPip").value);
-    const riskMoney = capV * r / 100;
-    const lot = sl > 0 && pip > 0 ? Math.floor(riskMoney / (sl * pip) * 100) / 100 : NaN;
-    $("cLot").textContent = isFinite(lot) ? fmt(lot) : "–";
-    $("cMax").textContent = isFinite(lot) ? fmt(lot * sl * pip) : "–";
-    store.set("calc", [$("cCap").value, $("cRisk").value, $("cSl").value, $("cPip").value, $("cSym").value]);
-  }
-
-  const PRESET = { EURUSD: "10", GBPUSD: "10", USDJPY: "6.7", XAUUSD: "1" };
-  function applyPreset() {
-    const v = $("cSym").value;
-    if (v !== "custom") $("cPip").value = v;
-    calc();
-  }
-  function calcFromSignal() {
-    const sig = all().find((m) => m.kind === "signal");
-    if (!sig) return toast("Pas encore de signal.");
-    const sym = (sig.d.sym || "").toUpperCase();
-    if (num(sig.d.slp) > 0) $("cSl").value = sig.d.slp;
-    const p = PRESET[sym];
-    $("cSym").value = p || "custom";
-    if (p) $("cPip").value = p;
-    calc(); toast("Stop du signal " + sym + " : " + sig.d.slp + " pips" + (p ? "" : ". Saisis la valeur du pip."));
-  }
-  function calcFromBalance() {
-    const st = lastStatus();
-    if (!st || !isFinite(num(st.d.eq))) return toast("Le solde arrive avec la prochaine mise à jour du robot.");
-    $("cCap").value = String(Math.round(num(st.d.eq)));
-    calc(); toast("Capital : ton équité actuelle.");
-  }
-
-  // ---------- Démo ----------
-  function demoData() {
-    const now = Math.floor(Date.now() / 1000);
-    let i = 0;
-    const mk = (ago, kind, title, message, tags) => ({ id: "demo" + (i++), time: now - ago, event: "message", title, message, tags: ["k=" + kind].concat(tags || []) });
-    const out = [];
-    // 40 mises à jour du compte (toutes les 15 min) pour les mini-graphiques
-    const base = { EURUSD: 1.0841, GBPUSD: 1.2731, USDJPY: 149.96, XAUUSD: 2361.4 };
-    const drift = { EURUSD: 0.00011, GBPUSD: 0.00009, USDJPY: -0.022, XAUUSD: 0.62 };
-    const dig = { EURUSD: 5, GBPUSD: 5, USDJPY: 3, XAUUSD: 2 };
-    const meta = { EURUSD: "up|58.4|14.2", GBPUSD: "up|63.1|17.9", USDJPY: "down|41.7|21.3", XAUUSD: "up|71.3|268.0" };
-    const news = { EURUSD: 0, GBPUSD: 0, USDJPY: 1, XAUUSD: 1 };
-    for (let k = 39; k >= 0; k--) {
-      const step = 39 - k;
-      const m = Object.keys(base).map((s) => {
-        const wave = Math.sin(step / 4 + s.length) * drift[s] * 3;
-        const px = (base[s] + drift[s] * step + wave).toFixed(dig[s]);
-        return "m=" + s + "|" + meta[s] + "|" + px + "|" + news[s];
-      });
-      const tags = ["bal=10000.00", "eq=" + (10060 + step * 2.1).toFixed(2), "cur=EUR", "day=" + (step * 2.1 + 4.5).toFixed(2), "ml=1840", "pos=2", "tf=H1", "risk=1.0"].concat(m);
-      if (k === 0) tags.push("st=14|7|5.20|14.00|8.80", "o=EURUSD-1|EURUSD|buy|1.08512|1.08197|1.09142", "p=EURUSD|buy|0.31|98.20|1", "p=XAUUSD|buy|0.05|44.40|1");
-      out.push(mk(k * 900 + 30, "status", "Statut", "Mise à jour du compte", tags));
-    }
-    const SEP = "------------------------------";
-    const sig = (ago, sid, side, sym, reasons, entry, sl, tp, slp, tpp, lot, risk, lim) => {
-      const buy = side === "buy", until = now - ago + 15 * 60, why = reasons.join(" · ");
-      const msg = (buy ? "🟢 ACHAT " : "🔴 VENTE ") + sym + " (H1)\n" + SEP + "\n • Entrée : " + entry + "\n • Stop Loss : " + sl + " (" + slp + " pips)\n • Take Profit : " + tp + " (" + tpp + " pips)" +
-        "\n • Volume : " + lot + " lot\n • Si SL : -" + risk + " EUR | Si TP : +" + (2 * risk).toFixed(2) + " EUR\n" + SEP +
-        "\n⏱ À prendre avant " + hhmm(until) + "\n⚠️ Trop tard si le prix est " + (buy ? "au-dessus de " : "en dessous de ") + lim + "\n📊 " + why;
-      return mk(ago, "signal", msg.split("\n")[0], msg, ["sid=" + sid, "exp=48", "sym=" + sym, "side=" + side, "tf=H1", "entry=" + entry, "sl=" + sl, "tp=" + tp, "lim=" + lim,
-        "slp=" + slp, "tpp=" + tpp, "lot=" + lot, "risk=" + risk, "cur=EUR", "rr=2.0", "vu=" + until, "rs=" + why.replace(/,/g, ";")]);
-    };
-    const pre = (ago, side, sym, inSec) => {
-      const at = now - ago + inSec;
-      const msg = "⏳ PRÉPARE-TOI : " + sym + "\n" + SEP + "\n • " + (side === "buy" ? "ACHAT" : "VENTE") + " possible à " + hhmm(at) + " (dans 1 min)\n • Ouvre MT5 sur " + sym + " maintenant\n • Attends la confirmation avant d'entrer\n" + SEP;
-      return mk(ago, "pre", msg.split("\n")[0], msg, ["sym=" + sym, "side=" + side, "ev=pre", "at=" + at, "tf=H1"]);
-    };
-    const res = (ago, sid, side, sym, kind, r, entry, exit, st, money) => {
-      const head = kind === "tp" ? "✅ TAKE PROFIT : " : kind === "sl" ? "❌ STOP LOSS : " : "⌛ EXPIRÉ : ";
-      const [n, w, tot] = st.split("|");
-      const msg = head + sym + "\n" + SEP + "\n • " + (side === "buy" ? "ACHAT" : "VENTE") + " à " + entry + "\n • Sortie : " + exit + "\n • Résultat : " + (r > 0 ? "+" : "") + r.toFixed(2) + " R (" + (money > 0 ? "+" : "") + money.toFixed(2) + " EUR)\n" + SEP +
-        "\n📊 Bilan des signaux : " + n + " terminés, " + Math.round(w / n * 100) + " % gagnants, " + (tot > 0 ? "+" : "") + Number(tot).toFixed(1) + " R au total.";
-      return mk(ago, "result", msg.split("\n")[0], msg, ["sid=" + sid, "sym=" + sym, "side=" + side, "res=" + kind, "r=" + r.toFixed(2), "exit=" + exit, "st=" + st]);
-    };
-    const trade = (ago, title, lines, tags) => mk(ago, "trade", title, title + "\n" + SEP + "\n" + lines.join("\n") + "\n" + SEP, tags);
-    out.push(
-      pre(20, "buy", "GBPUSD", 60),
-      sig(40, "EURUSD-1", "buy", "EURUSD", ["MM20 / MM50 : croisement à la hausse", "Prix au-dessus de l'EMA 200 (tendance haussière)", "Tendance haussière confirmée en H4", "Tendance forte (ADX 27)"], "1.08512", "1.08197", "1.09142", "31.5", "63.0", "0.31", "97.65", "1.08575"),
-      pre(100, "buy", "EURUSD", 60),
-      mk(1500, "news", "ANNONCE FORTE dans 30 min : USD - Nonfarm Payrolls", "ANNONCE FORTE dans 30 min : USD - Nonfarm Payrolls\nLe marché peut bouger fort. Évite d'entrer juste avant et vérifie tes stops sur USD.", ["cur=USD", "min=30"]),
-      res(3000, "USDJPY-1", "sell", "USDJPY", "tp", 2, "149.682", "149.042", "14|7|5.20|14.00|8.80", 197.80),
-      sig(16000, "USDJPY-1", "sell", "USDJPY", ["RSI qui redescend du surachat (68) : fin du rebond", "Prix sous l'EMA 200 (tendance baissière)", "Tendance baissière confirmée en H4", "Tendance forte (ADX 31)"], "149.682", "150.002", "149.042", "32.0", "64.0", "0.46", "98.90", "149.618"),
-      res(30000, "GBPUSD-1", "buy", "GBPUSD", "sl", -1, "1.27410", "1.27050", "13|6|3.20|12.00|8.80", -97.20),
-      sig(52000, "GBPUSD-1", "buy", "GBPUSD", ["MM20 / MM50 : croisement à la hausse", "Prix au-dessus de l'EMA 200 (tendance haussière)", "Tendance haussière confirmée en H4", "Tendance forte (ADX 23)"], "1.27410", "1.27050", "1.28130", "36.0", "72.0", "0.27", "97.20", "1.27482"),
-      res(70000, "XAUUSD-1", "buy", "XAUUSD", "tp", 2, "2331.40", "2363.40", "12|6|4.20|12.00|7.80", 192.00),
-      sig(98000, "XAUUSD-1", "buy", "XAUUSD", ["RSI qui remonte de la survente (34) : fin du repli", "Prix au-dessus de l'EMA 200 (tendance haussière)", "Tendance haussière confirmée en H4", "Tendance forte (ADX 29)"], "2331.40", "2315.40", "2363.40", "1600.0", "3200.0", "0.06", "96.00", "2334.60"),
-      trade(7200, "🏁 Position fermée : GBPUSD", [" • Raison : Take Profit", " • Volume : 0.25 lot", " • Prix : 1.27480", "✅ Résultat : +142.30 EUR"], ["sym=GBPUSD", "ev=close", "why=Take Profit", "profit=142.30"]),
-      trade(15, "📣 Position ouverte : EURUSD", [" • Volume : 0.31 lot", " • Take Profit : 1.09142", " • Stop Loss : 1.08197", "🔷 ACHAT | 1.08515"], ["sym=EURUSD", "side=buy", "ev=open"]),
-      mk(9000, "line", "EURUSD : prix monte au-dessus de 1.08400 (ligne ALERTE resistance)", "EURUSD : prix monte au-dessus de 1.08400 (ligne ALERTE resistance)", ["sym=EURUSD"]),
-      mk(14000, "account", "Position SANS stop loss : XAUUSD 0.05 lot (ticket 51234). Place un stop.", "Position SANS stop loss : XAUUSD 0.05 lot (ticket 51234). Place un stop.", ["sym=XAUUSD"]),
-      mk(20000, "summary", "RÉSUMÉ DU MARCHÉ H1", "RÉSUMÉ DU MARCHÉ H1\nEURUSD : hausse, RSI 55, ATR 14.6 pips\nGBPUSD : hausse, RSI 61, ATR 18.2 pips\nUSDJPY : baisse, RSI 44, ATR 20.9 pips\nXAUUSD : hausse, RSI 68, ATR 262.0 pips\nAnnonces fortes (24 h) : 2\n- USD Nonfarm Payrolls (dans 330 min)\n- USD Unemployment Rate (dans 330 min)\nBilan des signaux : 14 terminés, 50 % gagnants, +5.2 R au total."),
-      mk(110000, "info", "AlertesPro démarré : 4 marché(s), H1, risque 1.0 % par trade. Les alertes arriveront ici.", "AlertesPro démarré : 4 marché(s), H1, risque 1.0 % par trade. Les alertes arriveront ici.")
-    );
-    return out;
-  }
-
-  function applyMode() {
-    if (S.demo) { S.msgs = []; addMessages(demoData(), false); }
-    else { S.msgs = store.get("msgs", []); }
-    $("swDemo").classList.toggle("on", S.demo);
-    render(); connect();
-  }
-
-  // ---------- Navigation et événements ----------
-  function go(view) {
-    S.view = view;
-    document.querySelectorAll(".view").forEach((v) => v.classList.toggle("on", v.id === "v-" + view));
-    document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("on", b.dataset.view === view));
-    const latest = Math.floor(Date.now() / 1000);
-    if (view === "signals") S.seen.signals = latest;
-    if (view === "feed") S.seen.feed = latest;
-    store.set("seen", S.seen);
-    renderBadges();
-    window.scrollTo(0, 0);
-  }
-
-  document.addEventListener("click", (e) => {
-    const b = e.target.closest("button"); if (!b) return;
-    if (b.dataset.view) return go(b.dataset.view);
-    if (b.dataset.go) return go(b.dataset.go);
-    if (b.dataset.copy) return copy(b.dataset.copy);
-    if (b.dataset.sf) { S.sigFilter = b.dataset.sf; return renderSignals(); }
-    if (b.dataset.ff) { S.feedFilter = b.dataset.ff; return renderFeed(); }
-  });
-
-  $("conn").onclick = () => go("settings");
-  $("genCode").onclick = () => {
-    const a = new Uint8Array(12); crypto.getRandomValues(a);
-    const abc = "abcdefghijkmnpqrstuvwxyz23456789";
-    $("code").value = "alertespro-" + Array.from(a, (x) => abc[x % abc.length]).join("");
-    toast("Nouveau code créé. Copie-le dans le robot.");
-  };
-  $("copyCode").onclick = () => $("code").value ? copy($("code").value) : toast("Pas encore de code.");
-  $("saveCode").onclick = () => {
-    const c = $("code").value.trim();
-    if (!/^[-_A-Za-z0-9]{8,64}$/.test(c)) return toast("Code invalide : lettres, chiffres et tirets (8 à 64).");
-    if (c !== S.code) { S.msgs = []; store.set("msgs", []); }
-    S.code = c; store.set("code", c);
-    if (S.demo) { S.demo = false; store.set("demo", false); }
-    applyMode(); toast("Connecté au robot."); go("home");
-  };
-  $("testBtn").onclick = sendTest;
-
-  // ---------- Telegram ----------
-  async function tgCall(token, method, body) {
-    const r = await fetch("https://api.telegram.org/bot" + token + "/" + method, body
-      ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : undefined);
-    let j = null; try { j = await r.json(); } catch (e) {}
-    return { status: r.status, ok: !!(j && j.ok), data: j };
-  }
-
-  function tgShow(kind, html) {
-    const color = kind === "ok" ? "var(--buy)" : kind === "warn" ? "var(--gold)" : "var(--sell)";
-    $("tgOut").innerHTML = '<div style="margin-top:12px;padding:12px;border-radius:12px;background:var(--bg2);border:1px solid var(--line);font-size:13.5px"><b style="color:' + color + '">' + html + "</div>";
-  }
-
-  const tgLink = (name) => name ? '<br><a class="mini-btn" style="margin-top:10px;text-decoration:none" href="https://t.me/' + encodeURIComponent(name) + '" target="_blank" rel="noopener">Ouvrir @' + esc(name) + " dans Telegram</a>" : "";
-
-  async function tgCheck() {
-    // accepte aussi le message entier de BotFather : on en extrait le jeton
-    const raw = $("tgToken").value.trim(), found = raw.match(/\d{5,}:[A-Za-z0-9_-]{30,}/);
-    const token = found ? found[0] : raw;
-    if (found) $("tgToken").value = token;
-    if (!found && /^\d{5,}:?$/.test(raw)) return tgShow("err", "Il manque la fin du jeton.</b><br>Après les chiffres, il y a deux-points <b>:</b> puis une longue suite de lettres. Dans Telegram, <b>appuie longuement sur le message de BotFather › Copier</b>, puis colle tout le message ici : l'appli trouve le jeton toute seule.");
-    if (!found) return tgShow("err", "Jeton introuvable.</b><br>Dans Telegram, appuie longuement sur le message de BotFather qui contient le jeton › <b>Copier</b>, puis colle tout ici.");
-    store.set("tgToken", token);
-    const btn = $("tgCheck"); btn.disabled = true; btn.textContent = "Vérification…";
-    try {
-      const me = await tgCall(token, "getMe");
-      if (me.status === 401 || me.status === 404) return tgShow("err", "Jeton refusé par Telegram.</b><br>Ce jeton n'est plus valable. Si tu as fait /revoke, colle le nouveau (BotFather › /mybots › ton bot › API Token).");
-      if (!me.ok) return tgShow("err", "Telegram ne répond pas normalement (code " + me.status + ").</b><br>Un antivirus ou un bloqueur de publicité peut gêner sur cet appareil. Réessaie, ou fais le test depuis ton téléphone.");
-      const name = me.data.result.username;
-      const up = await tgCall(token, "getUpdates");
-      const chats = ((up.data && up.data.result) || []).map((u) => (u.message || u.edited_message || {}).chat).filter((c) => c && c.type === "private");
-      if (!chats.length) return tgShow("warn", "Ton bot @" + esc(name) + " fonctionne.</b><br>Ouvre-le dans Telegram, envoie <b>/start</b>, puis touche à nouveau Vérifier.");
-      const chat = chats[chats.length - 1];
-      const sent = await tgCall(token, "sendMessage", { chat_id: chat.id, text: "✅ AlertesPro : ton bot Telegram fonctionne.\nUne fois le robot MT5 réglé, tes pré-alertes, signaux et résultats arriveront ici." });
-      if (!sent.ok) return tgShow("err", "Message de test refusé.</b><br>Renvoie /start au bot @" + esc(name) + " puis réessaie.");
-      store.set("tgChat", String(chat.id));
-      store.set("tgBot", name);
-      tgShow("ok", "C'est bon ! Message de test envoyé à @" + esc(name) + ".</b><br>Ton chat id : <b class=\"num\">" + esc(chat.id) + '</b> <button class="mini-btn" data-copy="' + esc(chat.id) + '">Copier</button>' +
-        "<br>Dernière étape dans MT5 : <b>Telegram = true</b> et ce jeton dans <b>Telegram : token du bot</b>." + tgLink(name));
-    } catch (e) {
-      tgShow("err", "Pas de connexion avec Telegram.</b><br>Vérifie ta connexion internet et réessaie.");
-    } finally { btn.disabled = false; btn.textContent = "Vérifier et envoyer un test"; }
-  }
-  $("tgCheck").onclick = tgCheck;
-  $("tgToken").addEventListener("input", () => { $("tgOut").innerHTML = ""; });
-  $("swDemo").onclick = () => { S.demo = !S.demo; store.set("demo", S.demo); applyMode(); toast(S.demo ? "Mode démo activé" : "Mode démo désactivé"); };
-  $("swSound").onclick = () => { S.sound = !S.sound; store.set("sound", S.sound); $("swSound").classList.toggle("on", S.sound); if (S.sound) beep(); };
-  $("swNotif").onclick = async () => {
-    if (!("Notification" in window)) return toast("Notifications non disponibles ici. Installe l'appli sur l'écran d'accueil.");
-    if (!S.notif) {
-      const p = await Notification.requestPermission();
-      if (p !== "granted") return toast("Notifications refusées dans le navigateur.");
-    }
-    S.notif = !S.notif; store.set("notif", S.notif); $("swNotif").classList.toggle("on", S.notif);
-  };
-  $("clearBtn").onclick = () => {
-    if (!confirm("Effacer l'historique des alertes sur ce téléphone ?")) return;
-    S.msgs = []; store.set("msgs", []); render(); toast("Historique effacé.");
-  };
-  ["cCap", "cRisk", "cSl"].forEach((id) => $(id).addEventListener("input", calc));
-  $("cPip").addEventListener("input", () => { $("cSym").value = "custom"; calc(); });
-  $("cSym").addEventListener("change", applyPreset);
-  $("cFromSig").onclick = calcFromSignal;
-  $("cFromBal").onclick = calcFromBalance;
-  $("copyCode2").onclick = () => S.code ? copy(S.code) : toast("Crée d'abord ton code juste au-dessus.");
-
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && !S.demo && S.code) { poll().catch(() => {}); if (!es) connect(); } });
-  setInterval(() => { if (!document.hidden) render(); }, 60000);
-  setInterval(() => { if (!document.hidden) renderPre(); }, 5000);
-
-  // ---------- Démarrage ----------
-  $("code").value = S.code;
-  $("tgToken").value = store.get("tgToken", "");
-  if (store.get("tgBot", "")) $("tgOut").innerHTML = '<div style="margin-top:12px;font-size:13.5px" class="muted">Bot vérifié : @' + esc(store.get("tgBot", "")) + tgLink(store.get("tgBot", "")) + "</div>";
-  $("swSound").classList.toggle("on", S.sound);
-  $("swNotif").classList.toggle("on", S.notif);
-  const c = store.get("calc", null);
-  if (c) ["cCap", "cRisk", "cSl", "cPip", "cSym"].forEach((id, i) => { if (c[i] != null) $(id).value = c[i]; });
-  if (!$("cSym").value) $("cSym").value = "custom";
-  $("rules").innerHTML = RULES.map((r) => '<div class="rule">' + icon("check") + "<span>" + esc(r) + "</span></div>").join("");
-  calc();
-  if (!S.code && !store.get("visited", false)) { S.demo = true; store.set("demo", true); store.set("visited", true); }
-  applyMode();
-
-  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
 </script>
 </body>

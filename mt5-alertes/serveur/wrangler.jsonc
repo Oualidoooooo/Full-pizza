@@ -1,0 +1,16 @@
+{
+  // Serveur AlertesPro (Cloudflare Worker + base D1)
+  "name": "alertespro",
+  "main": "worker.js",
+  "compatibility_date": "2025-07-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "alertespro",
+      "database_id": "00000000-0000-4000-8000-000000000000"
+    }
+  ],
+  // toutes les 15 minutes : prévient si le robot MT5 ne répond plus
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "observability": { "enabled": true }
+}

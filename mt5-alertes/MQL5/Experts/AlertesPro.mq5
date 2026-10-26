@@ -14,7 +14,7 @@
 //|  Le robot ne passe AUCUN ordre : il surveille et il prévient.    |
 //+------------------------------------------------------------------+
 #property copyright "AlertesPro"
-#property version   "1.50"
+#property version   "2.00"
 #property description "Signaux avec stop loss / take profit / lot, suivi des résultats, calendrier économique, résumé du matin."
 #property description "Ne passe aucun ordre. Teste d'abord sur un compte démo."
 
@@ -29,7 +29,10 @@ input bool   InpTelegram     = false;         // Telegram
 input string InpTgToken      = "";            // Telegram : token du bot
 input string InpTgChatId     = "";            // Telegram : chat id (laisse vide : il est trouvé tout seul)
 input bool   InpTestAtStart  = true;          // Envoyer un message de test au démarrage
-input bool   InpApp          = true;          // Appli AlertesPro (tableau de bord sur le téléphone)
+input bool   InpServer       = false;         // Serveur AlertesPro (comptes + Telegram pour toute la famille)
+input string InpServerUrl    = "";            // Serveur : adresse (https://....workers.dev)
+input string InpServerKey    = "";            // Serveur : clé du robot
+input bool   InpApp          = false;         // Ancienne appli (relais ntfy.sh), plus utile avec le serveur
 input string InpAppCode      = "";            // Appli : code de connexion (copie-le depuis l'appli)
 input int    InpStatusMin    = 15;            // Appli : minutes entre deux mises à jour du compte
 
@@ -537,6 +540,289 @@ void CheckStatus()
   }
 
 //+------------------------------------------------------------------+
+//| Serveur AlertesPro : comptes + bot Telegram pour tout le monde   |
+//| Le robot envoie chaque événement, le serveur calcule le volume   |
+//| et les euros en jeu pour chaque personne, puis prévient sur      |
+//| Telegram.                                                        |
+//+------------------------------------------------------------------+
+string   g_outbox[];        // événements pas encore acceptés par le serveur
+datetime g_outTime[];
+datetime g_outLastTry = 0;
+
+bool ServerOn()
+  {
+   return InpServer && InpServerUrl != "" && InpServerKey != "" && !MQLInfoInteger(MQL_TESTER);
+  }
+
+string ServerBase()
+  {
+   string u = InpServerUrl;
+   StringTrimLeft(u);
+   StringTrimRight(u);
+   while(StringLen(u) > 0 && StringGetCharacter(u, StringLen(u) - 1) == '/')
+      u = StringSubstr(u, 0, StringLen(u) - 1);
+   if(StringFind(u, "http") != 0)
+      u = "https://" + u;
+   return u;
+  }
+
+//--- 1 = accepté, 0 = à réessayer plus tard, -1 = refusé (inutile de réessayer)
+int ServerPost(const string body)
+  {
+   static bool told = false;
+   string key = InpServerKey;
+   StringTrimLeft(key);
+   StringTrimRight(key);
+   char post[], result[];
+   string resHeaders;
+   int len = StringToCharArray(body, post, 0, WHOLE_ARRAY, CP_UTF8);
+   if(len > 0)
+      ArrayResize(post, len - 1); // retire le zéro final
+   ResetLastError();
+   int code = WebRequest("POST", ServerBase() + "/robot/event",
+                         "Content-Type: application/json\r\nX-Robot-Key: " + key + "\r\n",
+                         5000, post, result, resHeaders);
+   if(code == -1)
+     {
+      int err = GetLastError();
+      if(err == 4014 && !told)
+        {
+         Print("Serveur : ajoute ", ServerBase(), " dans Outils > Options > Expert Advisors > WebRequest.");
+         told = true;
+        }
+      else if(err != 4014)
+         Print("Serveur : pas de connexion (erreur ", err, "), je réessaierai.");
+      return 0;
+     }
+   if(code == 200)
+      return 1;
+   if(code == 403)
+     {
+      if(!told)
+         Print("Serveur : clé du robot refusée. Recopie la clé donnée par Claude dans les paramètres.");
+      told = true;
+      return -1;
+     }
+   Print("Serveur : réponse ", code, " ", CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8));
+   return (code >= 500) ? 0 : -1;
+  }
+
+//--- envoie tout de suite, sinon garde l'événement pour le renvoyer
+void ServerSend(const string body)
+  {
+   if(!ServerOn())
+      return;
+   if(ArraySize(g_outbox) == 0 && ServerPost(body) != 0)
+      return;
+   int n = ArraySize(g_outbox);
+   if(n >= 30)
+      return;
+   ArrayResize(g_outbox, n + 1);
+   ArrayResize(g_outTime, n + 1);
+   g_outbox[n]  = body;
+   g_outTime[n] = TimeLocal();
+  }
+
+void ServerRetry()
+  {
+   if(ArraySize(g_outbox) == 0 || TimeLocal() - g_outLastTry < 15)
+      return;
+   g_outLastTry = TimeLocal();
+   while(ArraySize(g_outbox) > 0)
+     {
+      int res = (TimeLocal() - g_outTime[0] > 20 * 60) ? -1 : ServerPost(g_outbox[0]); // trop vieux : abandon
+      if(res == 0)
+         return;
+      int n = ArraySize(g_outbox);
+      for(int i = 0; i < n - 1; i++)
+        {
+         g_outbox[i]  = g_outbox[i + 1];
+         g_outTime[i] = g_outTime[i + 1];
+        }
+      ArrayResize(g_outbox, n - 1);
+      ArrayResize(g_outTime, n - 1);
+     }
+  }
+
+//--- petits morceaux de JSON
+string JS(const string k, const string v)  { return "\"" + k + "\":\"" + JsonEscape(v) + "\""; }
+string JN(const string k, const double v, const int d) { return "\"" + k + "\":" + DoubleToString(v, d); }
+string JI(const string k, const long v)    { return "\"" + k + "\":" + IntegerToString(v); }
+
+//--- trouve un symbole même avec un suffixe du courtier (EURUSD.m, EURUSDm...)
+string FindSymbol(const string name)
+  {
+   if(SymbolInfoInteger(name, SYMBOL_EXIST) && SymbolSelect(name, true))
+      return name;
+   int total = SymbolsTotal(false);
+   for(int i = 0; i < total; i++)
+     {
+      string s = SymbolName(i, false);
+      if(StringFind(s, name) == 0 && StringLen(s) <= StringLen(name) + 4 && SymbolSelect(s, true))
+         return s;
+     }
+   return "";
+  }
+
+//--- multiplie un montant dans la devise du compte par ce taux pour l'avoir en euros (0 = inconnu)
+double EurRate()
+  {
+   static double   cached = 0;
+   static datetime when   = 0;
+   string acc = AccountInfoString(ACCOUNT_CURRENCY);
+   if(acc == "EUR")
+      return 1.0;
+   if(cached > 0 && TimeLocal() - when < 300)
+      return cached;
+   double rate = 0;
+   string s = FindSymbol("EUR" + acc);
+   if(s != "" && SymbolInfoDouble(s, SYMBOL_BID) > 0)
+      rate = 1.0 / SymbolInfoDouble(s, SYMBOL_BID);
+   else
+     {
+      s = FindSymbol(acc + "EUR");
+      if(s != "" && SymbolInfoDouble(s, SYMBOL_BID) > 0)
+         rate = SymbolInfoDouble(s, SYMBOL_BID);
+     }
+   if(rate > 0)
+     {
+      cached = rate;
+      when   = TimeLocal();
+     }
+   return rate;
+  }
+
+string MoneyCur()
+  {
+   return EurRate() > 0 ? "EUR" : AccountInfoString(ACCOUNT_CURRENCY);
+  }
+
+//--- famille du marché (levier maximum autorisé pour un particulier)
+string SymClass(const string sym)
+  {
+   string up = sym;
+   StringToUpper(up);
+   if(StringFind(up, "XAU") >= 0 || StringFind(up, "GOLD") >= 0)
+      return "gold";
+   if(StringFind(up, "BTC") >= 0 || StringFind(up, "ETH") >= 0 || StringFind(up, "CRYPTO") >= 0)
+      return "crypto";
+   ENUM_SYMBOL_CALC_MODE mode = (ENUM_SYMBOL_CALC_MODE)SymbolInfoInteger(sym, SYMBOL_TRADE_CALC_MODE);
+   if(mode == SYMBOL_CALC_MODE_FOREX || mode == SYMBOL_CALC_MODE_FOREX_NO_LEVERAGE)
+      return "fx";
+   if(mode == SYMBOL_CALC_MODE_CFDINDEX)
+      return "index";
+   if(mode == SYMBOL_CALC_MODE_EXCH_STOCKS || mode == SYMBOL_CALC_MODE_EXCH_STOCKS_MOEX)
+      return "stock";
+   return "other";
+  }
+
+//--- ce dont le serveur a besoin pour calculer le volume de chacun
+//    vpe = euros gagnés/perdus quand le prix bouge de 1 avec 1 lot ; npe = valeur d'1 lot en euros
+string SizingJson(const string sym)
+  {
+   double tickSize  = SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_SIZE);
+   double tickValue = SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_VALUE);
+   double rate = EurRate();
+   if(rate <= 0)
+      rate = 1.0; // pas de conversion possible : montants dans la devise du compte
+   double vpe = (tickSize > 0) ? tickValue / tickSize * rate : 0;
+   double px  = SymbolInfoDouble(sym, SYMBOL_BID);
+   return JI("dg", SymbolInfoInteger(sym, SYMBOL_DIGITS)) + "," +
+          JN("vpe", vpe, 6) + "," + JN("npe", px * vpe, 2) + "," + JS("cls", SymClass(sym)) + "," +
+          JN("vmin", SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN), 4) + "," +
+          JN("vstep", SymbolInfoDouble(sym, SYMBOL_VOLUME_STEP), 4) + "," +
+          JN("vmax", SymbolInfoDouble(sym, SYMBOL_VOLUME_MAX), 2) + "," + JS("cur", MoneyCur());
+  }
+
+void ServerSignal(const string sid, const string sym, const bool buy, const double entry, const double sl, const double tp,
+                  const double limit, const double dist, const int validMin, const string why, const string news)
+  {
+   int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+   double pip = PipSize(sym);
+   string body = "{" + JS("type", "signal") + "," + JS("eid", "s:" + sid) + "," + JS("sid", sid) + "," +
+                 JS("sym", sym) + "," + JS("side", buy ? "buy" : "sell") + "," + JS("tf", TfName(InpTimeframe)) + "," +
+                 JN("entry", entry, dg) + "," + JN("sl", sl, dg) + "," + JN("tp", tp, dg) + "," + JN("lim", limit, dg) + "," +
+                 JN("slp", pip > 0 ? dist / pip : 0, 1) + "," + JN("tpp", pip > 0 ? dist * InpRR / pip : 0, 1) + "," +
+                 JN("rr", InpRR, 2) + "," + JI("vu", (long)(TimeGMT() + validMin * 60)) + "," +
+                 JS("rs", why) + "," + JS("news", news) + "," + SizingJson(sym) + "}";
+   ServerSend(body);
+  }
+
+void ServerPre(const string sym, const bool buy, const int left, const double atr, const datetime bar)
+  {
+   double px = buy ? SymbolInfoDouble(sym, SYMBOL_ASK) : SymbolInfoDouble(sym, SYMBOL_BID);
+   int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+   string body = "{" + JS("type", "pre") + "," + JS("eid", "p:" + sym + ":" + IntegerToString((long)bar)) + "," +
+                 JS("sym", sym) + "," + JS("side", buy ? "buy" : "sell") + "," + JS("tf", TfName(InpTimeframe)) + "," +
+                 JI("at", (long)(TimeGMT() + left)) + "," + JN("px", px, dg) + "," + JN("sld", atr * InpAtrMult, dg) + "," +
+                 JN("rr", InpRR, 2) + "," + SizingJson(sym) + "}";
+   ServerSend(body);
+  }
+
+void ServerCancel(const string sym, const datetime bar)
+  {
+   ServerSend("{" + JS("type", "cancel") + "," + JS("eid", "c:" + sym + ":" + IntegerToString((long)bar)) + "," + JS("sym", sym) + "}");
+  }
+
+void ServerResult(const Track &t, const string res, const double r, const double exitPx)
+  {
+   int dg = (int)SymbolInfoInteger(t.sym, SYMBOL_DIGITS);
+   ServerSend("{" + JS("type", "result") + "," + JS("eid", "r:" + t.sid) + "," + JS("sid", t.sid) + "," + JS("sym", t.sym) + "," +
+              JS("side", t.buy ? "buy" : "sell") + "," + JS("res", res) + "," + JN("r", r, 4) + "," +
+              JN("entry", t.entry, dg) + "," + JN("exit", exitPx, dg) + "," + JI("dg", dg) + "," + JS("cur", MoneyCur()) + "}");
+  }
+
+//--- état des marchés (toutes les 5 minutes) : tendance, prix, taille moyenne du stop
+void ServerStatus()
+  {
+   string mk = "";
+   for(int i = 0; i < ArraySize(g_syms); i++)
+     {
+      string sym = g_syms[i].name;
+      double trend = 0, atr = 0, rsi = 0, htf = 0;
+      double close = iClose(sym, InpTimeframe, 1);
+      string dir = "flat";
+      if(LastValue(g_syms[i].hTrend, 1, trend) && close > 0)
+        {
+         dir = (close > trend) ? "up" : "down";
+         if(InpHtfFilter && LastValue(g_syms[i].hHtf, 1, htf))
+           {
+            double htfClose = iClose(sym, InpHtf, 1);
+            if(htfClose > 0 && ((htfClose > htf) != (dir == "up")))
+               dir = "flat"; // les deux unités de temps ne sont pas d'accord
+           }
+        }
+      LastValue(g_syms[i].hRsi, 1, rsi);
+      LastValue(g_syms[i].hAtr, 1, atr);
+      if(atr <= 0)
+         continue;
+      int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      double pip = PipSize(sym);
+      string news = "";
+      NewsNear(sym, 60, news);
+      mk += (mk == "" ? "" : ",") + "{" + JS("sym", sym) + "," + JS("dir", dir) + "," + JN("rsi", rsi, 1) + "," +
+            JN("px", SymbolInfoDouble(sym, SYMBOL_BID), dg) + "," + JN("sld", atr * InpAtrMult, dg) + "," +
+            JN("slp", pip > 0 ? atr * InpAtrMult / pip : 0, 1) + "," + JS("news", news) + "," + SizingJson(sym) + "}";
+     }
+   string body = "{" + JS("type", "status") + "," + JS("ver", "2.00") + "," + JS("tf", TfName(InpTimeframe)) + "," +
+                 JN("rr", InpRR, 2) + "," + JS("cur", MoneyCur()) + "," + JI("open", ArraySize(g_tracks)) + "," +
+                 "\"markets\":[" + mk + "]}";
+   ServerPost(body);
+  }
+
+void CheckServer()
+  {
+   static datetime last = 0;
+   if(!ServerOn())
+      return;
+   ServerRetry();
+   if(last != 0 && TimeLocal() - last < 300)
+      return;
+   last = TimeLocal();
+   ServerStatus();
+  }
+
+//+------------------------------------------------------------------+
 //| Envoi d'une alerte sur tous les canaux choisis                   |
 //+------------------------------------------------------------------+
 void Notify(const string msg, const string kind = "info", const string tags = "")
@@ -551,7 +837,8 @@ void Notify(const string msg, const string kind = "info", const string tags = ""
       Print("Push : échec (", GetLastError(), "). Vérifie ton MetaQuotes ID dans Outils > Options > Notifications.");
    if(InpEmail && !SendMail("Alerte MT5", msg))
       Print("E-mail : échec (", GetLastError(), "). Vérifie Outils > Options > E-mail.");
-   if(InpTelegram)
+   //--- avec le serveur, les signaux arrivent sur Telegram par le serveur (calculés pour chaque compte)
+   if(InpTelegram && !(ServerOn() && (kind == "signal" || kind == "pre" || kind == "result")))
       SendTelegram(msg);
 
    //--- historique affiché sur le graphique (première ligne du message)
@@ -851,6 +1138,7 @@ void CloseTrack(const int idx, const string res, const double exitPx)
    msg += "\n" + SEP + "\n📊 " + StatsText();
    string tags = "sid=" + t.sid + ",sym=" + t.sym + ",side=" + (t.buy ? "buy" : "sell") + ",res=" + res +
                  ",r=" + DoubleToString(r, 2) + ",exit=" + Px(t.sym, exitPx) + "," + StatsTag();
+   ServerResult(t, res, r, exitPx);
    if(InpResultAlerts)
       Notify(msg, "result", tags);
    else
@@ -1011,6 +1299,7 @@ bool SendSignal(const string sym, const bool buy, const string reason, const dou
                  ",cur=" + cur + ",rr=" + DoubleToString(InpRR, 1) +
                  ",vu=" + IntegerToString((long)(TimeGMT() + validMin * 60)) + ",rs=" + rs;
    Notify(msg, "signal", tags);
+   ServerSignal(sid, sym, buy, entry, sl, tp, limit, dist, validMin, why, newsNear ? news : "");
    AddTrack(sid, sym, buy, entry, sl, tp, lots > 0 ? realRisk : 0.0);
    return true;
   }
@@ -1130,6 +1419,7 @@ void CheckPreAlert(SymState &st)
    msg += " • Attends la confirmation avant d'entrer\n" + SEP;
    Notify(msg, "pre", "sym=" + st.name + ",side=" + (buy ? "buy" : "sell") + ",ev=pre,at=" +
           IntegerToString((long)(TimeGMT() + left)) + ",tf=" + TfName(InpTimeframe));
+   ServerPre(st.name, buy, left, atr, bar);
   }
 
 //+------------------------------------------------------------------+
@@ -1171,8 +1461,11 @@ void CheckSymbol(SymState &st)
    if(st.preBar != 0)
      {
       if(st.preBar == iTime(st.name, InpTimeframe, 1) && !sent)
+        {
          Notify("✖ ANNULÉ : " + st.name + "\n" + SEP + "\n • Les conditions ne sont plus réunies\n • Ne fais rien\n" + SEP,
                 "pre", "sym=" + st.name + ",ev=cancel");
+         ServerCancel(st.name, st.preBar);
+        }
       st.preBar = 0;
      }
 
@@ -1592,9 +1885,19 @@ int OnInit()
              " % par trade. Les alertes arriveront ici." +
              (InpTrack ? "\n" + StatsText() + " En cours : " + IntegerToString(ArraySize(g_tracks)) + "." : ""));
 
+   //--- serveur AlertesPro : vérifie les réglages et envoie l'état des marchés
+   if(InpServer && !MQLInfoInteger(MQL_TESTER))
+     {
+      if(InpServerUrl == "" || InpServerKey == "")
+         Print("Serveur : remplis l'adresse et la clé du robot dans les paramètres (onglet Entrées).");
+      else
+         Print("Serveur AlertesPro : ", ServerBase(), " (pense à l'autoriser dans Outils > Options > Expert Advisors > WebRequest).");
+     }
+
    //--- rattrape les signaux conclus pendant que MT5 était fermé
    if(InpTrack)
       CatchUpTracks();
+   CheckServer();
    return INIT_SUCCEEDED;
   }
 
@@ -1654,6 +1957,7 @@ void OnTimer()
    CheckNews();
    CheckSummary();
    CheckStatus();
+   CheckServer();
    CheckTelegram();
    UpdatePanel();
   }

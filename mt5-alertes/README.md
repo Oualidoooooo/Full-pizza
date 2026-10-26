@@ -8,44 +8,51 @@ stop loss, take profit et taille de lot calculée selon ton risque.
 > décides. Aucune stratégie ne garantit des bénéfices. Teste d'abord sur un
 > **compte démo** (voir plus bas).
 
-## L'appli sur ton téléphone
+## L'appli et le bot Telegram (comptes pour la famille et les amis)
 
-**Lien : https://oualidoooooo.github.io/Full-pizza/mt5-alertes/app/**
-(le lien marche une fois les fichiers sur la branche publiée par GitHub Pages)
+**Appli : https://oualidoooooo.github.io/Full-pizza/mt5-alertes/app/**
 
-Elle affiche en direct :
+Chaque personne crée son **compte** (prénom, e-mail, mot de passe, capital),
+relie son **Telegram** au bot avec son **code secret**, et reçoit les alertes
+**calculées pour son argent** : volume, perte si Stop Loss, gain si Take Profit.
 
-- **Accueil** : équité, résultat du jour, marge, positions ouvertes, dernier
-  signal, annonces à venir, calculatrice de lot et règles de risque.
-- **Signaux** : ton **bilan** (taux de réussite, résultat en R, facteur de
-  profit, courbe), puis chaque signal avec entrée, stop, objectif (touche un
-  prix pour le copier), lot, risque, son **statut** (en cours, TP touché, SL
-  touché, expiré) et un bouton **Copier l'ordre**.
-- **Marchés** : tendance, prix, **mini-graphique et variation sur 24 h**, jauge
-  RSI, volatilité et annonce proche, ainsi que le résumé du matin.
-- **Alertes** : tout l'historique, filtrable par type (dont les résultats).
-- **Calculatrice** : préréglages par marché, remplissage avec le dernier signal
-  ou ton solde.
+- **Accueil** : le signal en cours (touche un prix pour le copier), ton capital,
+  ta perte max et ton gain visé par trade, ton résultat du jour et ton bilan.
+- **Marchés** : pour chaque marché, combien tu perds ou gagnes sur un signal,
+  avec le volume ; interrupteur pour suivre ou non un marché.
+- **Alertes** : tout l'historique, avec le résultat en euros.
+- **Compte** : capital, risque (0,25 à 2 %), Telegram, pause, aide.
+  L'administrateur (le premier compte) voit aussi le **lien d'invitation** et
+  la liste des membres.
 
-À la première ouverture, elle démarre en **mode démo** avec des données
-d'exemple. Pour la brancher sur ton robot :
+Protections pour ne pas cramer un compte : 2 % de risque maximum par trade,
+3 trades en cours maximum, stop automatique après −3 % dans la journée,
+volume réduit si la marge serait trop grande, et « passe ton tour » quand
+même 0,01 lot risquerait trop.
 
-1. Dans l'appli, ouvre **Réglages**, puis touche **Nouveau code** et **Copier**.
-2. Dans MT5 : **Outils > Options > Expert Advisors** → *Autoriser WebRequest*
-   → ajoute `https://ntfy.sh`.
-3. Dans les paramètres du robot, colle le code dans **Appli : code de connexion**.
-4. Dans l'appli, touche **Se connecter**.
-5. Installe-la : sur iPhone avec **Partager > Sur l'écran d'accueil**, sur
-   Android avec **⋮ > Installer l'application**.
+Commandes du bot : `/moi`, `/marches`, `/capital 1500`, `/risque 1`,
+`/pause`, `/reprendre`, `/aide`.
 
-**Pour recevoir les signaux même appli fermée** : installe l'appli gratuite
-**ntfy** (App Store / Play Store), touche **+** et abonne-toi à ton code
-(serveur `ntfy.sh`). Ou active Telegram dans le robot (voir plus bas).
+### Installer le serveur (une fois, gratuit)
 
-Les données passent par **ntfy.sh**, un relais de messages gratuit et sans
-inscription. Ton code sert de mot de passe : garde-le pour toi. Le relais garde
-les messages 12 h et l'appli conserve l'historique sur ton téléphone. Le
-compte et les marchés sont mis à jour toutes les 15 min (réglable).
+Le serveur (dossier `serveur/`) tourne sur Cloudflare Workers avec une base D1.
+
+1. Ouvre ce lien et crée un compte Cloudflare gratuit si besoin :
+   **https://deploy.workers.cloudflare.com/?url=https://github.com/Oualidoooooo/Full-pizza/tree/main/mt5-alertes/serveur**
+2. Connecte ton GitHub quand il le demande, laisse les noms proposés.
+3. Dans **TG_TOKEN**, colle le jeton du bot donné par @BotFather.
+4. Clique **Create and deploy** et attends la fin (1 à 2 minutes).
+5. Copie l'adresse du serveur (`https://alertespro.<toi>.workers.dev`).
+
+Le bot Telegram se branche tout seul au premier appel. Ensuite :
+
+- dans le robot MT5 : `Serveur AlertesPro = true`, l'adresse et la clé du robot,
+  et ajoute l'adresse dans **Outils > Options > Expert Advisors > WebRequest** ;
+- dans l'appli : la première personne qui crée un compte devient
+  administrateur, puis partage le lien d'invitation.
+
+Si le robot (MT5) ne répond plus pendant 30 minutes en semaine, le bot prévient
+l'administrateur.
 
 ## Les signaux de trading
 
