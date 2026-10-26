@@ -961,20 +961,32 @@ function marketOpen(ts) {
 //  est allumé (c'est alors lui qui envoie les signaux).
 // =====================================================================
 const CLOUD = {
+  enabled: true,                      // le robot cloud envoie les signaux (le robot MT5 n'est plus nécessaire)
   hourStart: 6, hourEnd: 19,          // nouveaux signaux entre 6 h et 19 h (Paris)
-  maFast: 20, maSlow: 50, trend: 200, rsiN: 14, rsiHigh: 70, rsiLow: 30,
-  atrN: 14, atrMult: 1.5, adxMin: 20, r1: 1, r2: 5, validMin: 15, expireBars: 48,
+  rsiHigh: 70, rsiLow: 30, atrMult: 1.5, r1: 1, r2: 5,
+  // deux réglages testés sur les vrais prix (H1 : 6 mois, M15 : 2 mois), ~4 signaux par jour à eux deux
+  tfs: [
+    { tf: 3600, name: "H1", range: "15d", adxMin: 15, validMin: 15, expire: 48 * 3600 },
+    { tf: 900, name: "M15", range: "5d", adxMin: 20, validMin: 5, expire: 24 * 3600 },
+  ],
   markets: [
-    { sym: "EURUSD", y: "EURUSD=X", dg: 5, pip: 0.0001, cls: "fx" },
-    { sym: "GBPUSD", y: "GBPUSD=X", dg: 5, pip: 0.0001, cls: "fx" },
-    { sym: "USDJPY", y: "JPY=X", dg: 3, pip: 0.01, cls: "fx" },
-    { sym: "XAUUSD", y: "GC=F", dg: 2, pip: 0.1, cls: "gold", spot: "XAU" },
+    { sym: "EURUSD", y: "EURUSD=X", dg: 5, pip: 0.0001, cls: "fx", q: "USD" },
+    { sym: "GBPUSD", y: "GBPUSD=X", dg: 5, pip: 0.0001, cls: "fx", q: "USD" },
+    { sym: "USDJPY", y: "JPY=X", dg: 3, pip: 0.01, cls: "fx", q: "JPY" },
+    { sym: "XAUUSD", y: "GC=F", dg: 2, pip: 0.1, cls: "gold", q: "USD", lot: 100, spot: true },
+    { sym: "AUDUSD", y: "AUDUSD=X", dg: 5, pip: 0.0001, cls: "fx", q: "USD" },
+    { sym: "USDCHF", y: "CHF=X", dg: 5, pip: 0.0001, cls: "fx", q: "CHF" },
+    { sym: "USDCAD", y: "CAD=X", dg: 5, pip: 0.0001, cls: "fx", q: "CAD" },
+    { sym: "NZDUSD", y: "NZDUSD=X", dg: 5, pip: 0.0001, cls: "fx", q: "USD" },
+    { sym: "EURJPY", y: "EURJPY=X", dg: 3, pip: 0.01, cls: "fx", q: "JPY" },
+    { sym: "GBPJPY", y: "GBPJPY=X", dg: 3, pip: 0.01, cls: "fx", q: "JPY" },
+    { sym: "EURGBP", y: "EURGBP=X", dg: 5, pip: 0.0001, cls: "fx", q: "GBP" },
   ],
 };
 const cloudTarget = () => 0.5 * CLOUD.r1 + 0.5 * CLOUD.r2;
 
-async function yahoo(ysym, range) {
-  const r = await fetch("https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(ysym) + "?interval=1h&range=" + range,
+async function yahooTf(ysym, interval, range) {
+  const r = await fetch("https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(ysym) + "?interval=" + interval + "&range=" + range,
     { headers: { "User-Agent": "Mozilla/5.0 (AlertesPro)" }, cf: { cacheTtl: 20 } });
   if (!r.ok) throw new Error("prix " + ysym + " : " + r.status);
   const j = await r.json();
@@ -1039,48 +1051,45 @@ function adxArr(b, n) {
   const first = dx.findIndex(Number.isFinite);
   return first < 0 ? dx.map(() => NaN) : wilder(dx.map((x) => (Number.isFinite(x) ? x : 0)), n, first);
 }
-// bougies H4 (fermées) à partir des bougies H1
-function h4Closes(b, nowTs) {
-  const out = [];
-  let key = -1, close = 0, end = 0;
+// tendance de fond H4 (EMA 200) calculée à partir des bougies H1
+function h4Trend(b, nowTs) {
+  const closes = [];
+  let key = -1;
   for (let i = 0; i < b.t.length; i++) {
     const k = Math.floor(b.t[i] / 14400);
-    if (k !== key) { if (key >= 0 && end <= nowTs) out.push(close); key = k; end = (k + 1) * 14400; }
-    close = b.c[i];
+    if ((k + 1) * 14400 > nowTs) break;            // bougie H4 pas finie
+    if (k !== key) { closes.push(b.c[i]); key = k; } else closes[closes.length - 1] = b.c[i];
   }
-  if (key >= 0 && end <= nowTs) out.push(close);
-  return out;
+  const e = emaArr(closes, 200), i = closes.length - 1;
+  return i >= 0 && Number.isFinite(e[i]) ? closes[i] > e[i] : null;
 }
 
-function analyse(b, nowTs) {
-  return { fast: emaArr(b.c, CLOUD.maFast), slow: emaArr(b.c, CLOUD.maSlow), trend: emaArr(b.c, CLOUD.trend), rsi: rsiArr(b.c, CLOUD.rsiN), atr: atrArr(b, CLOUD.atrN), adx: adxArr(b, 14), h4: h4Closes(b, nowTs) };
+function analyse(b) {
+  return { fast: emaArr(b.c, 20), slow: emaArr(b.c, 50), trend: emaArr(b.c, 200), rsi: rsiArr(b.c, 14), atr: atrArr(b, 14), adx: adxArr(b, 14) };
 }
 
-// même logique que EvalSignal du robot MT5 ; i = index de la bougie analysée
-function evalCloud(b, A, i) {
-  if (i < 1) return null;
+// même logique que EvalSignal du robot MT5 ; i = index de la bougie analysée, htfUp = tendance H4
+function evalCloud(b, A, i, htfUp, adxMin) {
+  if (i < 1 || htfUp == null) return null;
   const close = b.c[i], rsi = A.rsi[i], rsiPrev = A.rsi[i - 1], atr = A.atr[i], trend = A.trend[i], adx = A.adx[i];
   if (![close, rsi, rsiPrev, atr, trend, adx, A.fast[i], A.slow[i], A.fast[i - 1], A.slow[i - 1]].every(Number.isFinite) || atr <= 0) return null;
-  const h4e = emaArr(A.h4, CLOUD.trend), hi = A.h4.length - 1;
-  if (hi < 0 || !Number.isFinite(h4e[hi])) return null;
-  const htfUp = A.h4[hi] > h4e[hi];
   const upTrend = close > trend && htfUp, downTrend = close < trend && !htfUp;
-  if (adx < CLOUD.adxMin) return null;
+  if (adx < adxMin) return null;
   const crossUp = A.fast[i - 1] <= A.slow[i - 1] && A.fast[i] > A.slow[i];
   const crossDn = A.fast[i - 1] >= A.slow[i - 1] && A.fast[i] < A.slow[i];
-  const extra = " · tendance " + (htfUp ? "haussière" : "baissière") + " confirmée en H4 · tendance forte (ADX " + Math.round(adx) + ")";
-  if (crossUp && upTrend && rsi < CLOUD.rsiHigh) return { buy: true, atr, why: "MM20 / MM50 : croisement à la hausse · prix au-dessus de l'EMA 200" + extra };
-  if (crossDn && downTrend && rsi > CLOUD.rsiLow) return { buy: false, atr, why: "MM20 / MM50 : croisement à la baisse · prix sous l'EMA 200" + extra };
-  if (upTrend && rsiPrev <= CLOUD.rsiLow && rsi > CLOUD.rsiLow) return { buy: true, atr, why: "RSI qui remonte de la survente (" + Math.round(rsi) + ") : fin du repli · prix au-dessus de l'EMA 200" + extra };
-  if (downTrend && rsiPrev >= CLOUD.rsiHigh && rsi < CLOUD.rsiHigh) return { buy: false, atr, why: "RSI qui redescend du surachat (" + Math.round(rsi) + ") : fin du rebond · prix sous l'EMA 200" + extra };
+  if (crossUp && upTrend && rsi < CLOUD.rsiHigh) return { buy: true, atr, why: "croisement des moyennes à la hausse, tendance haussière" };
+  if (crossDn && downTrend && rsi > CLOUD.rsiLow) return { buy: false, atr, why: "croisement des moyennes à la baisse, tendance baissière" };
+  if (upTrend && rsiPrev <= CLOUD.rsiLow && rsi > CLOUD.rsiLow) return { buy: true, atr, why: "fin d'un repli dans une tendance haussière" };
+  if (downTrend && rsiPrev >= CLOUD.rsiHigh && rsi < CLOUD.rsiHigh) return { buy: false, atr, why: "fin d'un rebond dans une tendance baissière" };
   return null;
 }
 
-function cloudSizing(m, price, eurusd, usdjpy) {
-  let vpe = 0;
-  if (m.sym === "EURUSD" || m.sym === "GBPUSD") vpe = 100000 / eurusd;
-  else if (m.sym === "USDJPY") vpe = 100000 / (usdjpy * eurusd);
-  else if (m.sym === "XAUUSD") vpe = 100 / eurusd;
+// euros pour 1 de variation du prix avec 1 lot
+function cloudSizing(m, price, S) {
+  const px = (sym, d) => (S.cache[sym] && S.cache[sym].px) || d;
+  const eurusd = px("EURUSD", 1.1);
+  const eurPer = { USD: 1 / eurusd, JPY: 1 / (px("USDJPY", 150) * eurusd), CHF: 1 / (px("USDCHF", 0.85) * eurusd), CAD: 1 / (px("USDCAD", 1.38) * eurusd), GBP: 1 / px("EURGBP", 0.85) };
+  const vpe = (m.lot || 100000) * (eurPer[m.q] || 1 / eurusd);
   return { dg: m.dg, vpe, npe: price * vpe, cls: m.cls, vmin: 0.01, vstep: 0.01, vmax: 100, cur: "EUR" };
 }
 
@@ -1091,34 +1100,57 @@ function inCloudHours(ts) {
 
 async function cloudRun(env, t) {
   const outbox = [];
-  const run = async (ev) => { const o = await onRobotEvent(env, ev); if (o && o.outbox) outbox.push(...o.outbox); };
-  const st = (await kvGet(env, "cloud")) || { value: {} };
-  const S = Object.assign({ tracks: [], last: {}, pre: {}, status: 0 }, st.value || {});
-  const minute = +parisParts(t).minute;
-  const critical = minute >= 58 || minute <= 3;
-  const needStatus = t - S.status >= 300;
-  const needFull = critical || needStatus;
-  const bars = {};
-  for (const m of CLOUD.markets) {
-    if (!needFull && !S.tracks.some((x) => x.sym === m.sym)) continue;
-    try { bars[m.sym] = await yahoo(m.y, needFull ? "60d" : "1d"); } catch (e) { console.log(String(e)); }
-  }
-  if (bars.XAUUSD) {
-    const spot = await goldOffset();
-    if (spot) {
-      const off = spot - bars.XAUUSD.price;
-      for (const k of ["o", "h", "l", "c"]) bars.XAUUSD[k] = bars.XAUUSD[k].map((v) => v + off);
-      bars.XAUUSD.price = spot;
-    }
-  }
-  const eurusd = bars.EURUSD ? bars.EURUSD.price : 1.1, usdjpy = bars.USDJPY ? bars.USDJPY.price : 150;
+  const run = async (ev) => { ev.src = "cloud"; const o = await onRobotEvent(env, ev); if (o && o.outbox) outbox.push(...o.outbox); };
+  const st = await kvGet(env, "cloud");
+  const S = Object.assign({ tracks: [], last: {}, pre: {}, htf: {}, cache: {}, hp: 0, status: 0 }, (st && st.value) || {});
+  for (const k of ["last", "pre", "htf", "cache"]) S[k] = S[k] || {};
 
-  // ---- suivi des trades en cours : TP1, TP2, stop, expiration
+  // ---- ce qu'il faut faire cette minute (les marchés sont coupés en 2 groupes pour étaler le travail)
+  const jobs = new Map(); // sym -> { m, tfs: [{cfg, kind, barStart}] }
+  CLOUD.markets.forEach((m, idx) => {
+    const g = idx % 2;
+    for (const cfg of CLOUD.tfs) {
+      const key = m.sym + ":" + cfg.name;
+      const cur = Math.floor(t / cfg.tf) * cfg.tf, left = cur + cfg.tf - t, since = t - cur;
+      const preWin = g === 0 ? left > 70 && left <= 150 : left > 5 && left <= 90;
+      const sigWin = g === 0 ? since < 240 : since >= 55 && since < 240;
+      const add = (kind, barStart) => { if (!jobs.has(m.sym)) jobs.set(m.sym, { m, tfs: [] }); jobs.get(m.sym).tfs.push({ cfg, kind, barStart, key }); };
+      if (sigWin && S.last[key] !== cur - cfg.tf) add("signal", cur - cfg.tf);
+      if (preWin && S.pre[key] !== cur && inCloudHours(cur + cfg.tf)) add("pre", cur);
+    }
+  });
+  for (const tr of S.tracks) if (!jobs.has(tr.sym)) { const m = CLOUD.markets.find((x) => x.sym === tr.sym); if (m) jobs.set(m.sym, { m, tfs: [] }); }
+
+  // ---- prix
+  let spot = null;
+  const bars = {};
+  for (const [sym, job] of jobs) {
+    const needH1 = job.tfs.some((x) => x.cfg.name === "H1");
+    const needM15 = job.tfs.some((x) => x.cfg.name === "M15") || !needH1;
+    bars[sym] = {};
+    try {
+      if (needH1) bars[sym].H1 = await yahooTf(job.m.y, "1h", "15d");
+      if (needM15) bars[sym].M15 = await yahooTf(job.m.y, "15m", job.tfs.length ? "5d" : "1d");
+    } catch (e) { console.log(String(e)); continue; }
+    if (job.m.spot) {
+      if (spot == null) spot = await goldOffset();
+      for (const k of ["H1", "M15"]) {
+        const b = bars[sym][k];
+        if (!b || !spot) continue;
+        const off = spot - b.price;
+        for (const f of ["o", "h", "l", "c"]) b[f] = b[f].map((v) => v + off);
+        b.price = spot;
+      }
+    }
+    const any = bars[sym].M15 || bars[sym].H1;
+    if (any) S.cache[sym] = Object.assign(S.cache[sym] || {}, { px: any.price, t });
+  }
+
+  // ---- suivi des trades : TP1, TP2, stop, expiration
   for (const tr of S.tracks.slice()) {
-    const b = bars[tr.sym];
+    const b = bars[tr.sym] && (bars[tr.sym].M15 || bars[tr.sym].H1);
     if (!b) continue;
     const m = CLOUD.markets.find((x) => x.sym === tr.sym);
-    // hauts et bas des bougies commencées depuis le signal
     let hi = b.price, lo = b.price;
     for (let i = 0; i < b.t.length; i++) if (b.t[i] >= tr.opened) { hi = Math.max(hi, b.h[i]); lo = Math.min(lo, b.l[i]); }
     const risk = Math.abs(tr.entry - tr.sl);
@@ -1135,56 +1167,79 @@ async function cloudRun(env, t) {
       await run({ type: "tp1", eid: "t:" + tr.sid, sid: tr.sid, sym: tr.sym, side: tr.buy ? "buy" : "sell", entry: tr.entry, tp1: tr.tp1, r1: CLOUD.r1, dg: m.dg, cur: "EUR" });
     }
     if (tr.buy ? hi >= tr.tp : lo <= tr.tp) { await close("tp", tr.tp); continue; }
-    if (t - tr.opened >= CLOUD.expireBars * 3600) await close("exp", b.price);
+    if (t - tr.opened >= (tr.life || 48 * 3600)) await close("exp", b.price);
   }
 
   // ---- pré-alertes et signaux
-  const statusMarkets = [];
-  for (const m of CLOUD.markets) {
-    const b = bars[m.sym];
-    if (!b || !needFull || b.c.length < 260) continue;
-    const A = analyse(b, t);
-    const n = b.c.length, lastT = b.t[n - 1];
-    const forming = lastT + 3600 > t;              // la dernière bougie n'est pas finie
-    const closedIdx = forming ? n - 2 : n - 1;
-    const closedT = b.t[closedIdx];
-    const open = S.tracks.some((x) => x.sym === m.sym);
-    const sz = cloudSizing(m, b.price, eurusd, usdjpy);
-    if (needStatus) {
-      const i = closedIdx, c = b.c[i];
-      const dir = Number.isFinite(A.trend[i]) ? (c > A.trend[i] ? "up" : "down") : "flat";
-      statusMarkets.push({ sym: m.sym, dir, rsi: A.rsi[i], px: b.price, sld: A.atr[i] * CLOUD.atrMult, slp: A.atr[i] * CLOUD.atrMult / m.pip, news: "", ...sz });
-    }
-    // pré-alerte : dans la dernière minute de la bougie en cours
-    const left = forming ? lastT + 3600 - t : 0;
-    if (forming && left <= 75 && left >= 5 && !open && S.pre[m.sym] !== lastT && inCloudHours(t + left)) {
-      const sig = evalCloud(b, A, n - 1);
-      if (sig) {
-        S.pre[m.sym] = lastT;
-        await run({ type: "pre", eid: "p:" + m.sym + ":" + lastT, sym: m.sym, side: sig.buy ? "buy" : "sell", tf: "H1", at: lastT + 3600, px: b.price, sld: sig.atr * CLOUD.atrMult, rr: cloudTarget(), ...sz });
+  for (const [sym, job] of jobs) {
+    const m = job.m;
+    for (const x of job.tfs) {
+      const b = bars[sym] && bars[sym][x.cfg.name];
+      if (!b || b.c.length < 260) continue;
+      const htfUp = S.htf[sym] ? S.htf[sym].up : null;
+      const A = analyse(b);
+      const sz = cloudSizing(m, b.price, S);
+      const idxOf = (start) => b.t.lastIndexOf(start);
+      if (x.cfg.name === "H1") {
+        const i = b.c.length - 1;
+        S.cache[sym] = Object.assign(S.cache[sym] || {}, { px: b.price, sld: A.atr[i] * CLOUD.atrMult, rsi: A.rsi[i], dir: htfUp == null ? "flat" : b.c[i] > A.trend[i] && htfUp ? "up" : b.c[i] < A.trend[i] && !htfUp ? "down" : "flat" });
       }
-    }
-    // signal : sur la bougie qui vient de se fermer (dans les 4 minutes)
-    if (closedT + 3600 <= t && t - (closedT + 3600) <= 240 && S.last[m.sym] !== closedT) {
-      S.last[m.sym] = closedT;
-      const sig = !open && inCloudHours(closedT + 3600) ? evalCloud(b, A, closedIdx) : null;
+      const open = S.tracks.some((tr) => tr.sym === sym);
+      if (x.kind === "pre") {
+        S.pre[x.key] = x.barStart;
+        const i = idxOf(x.barStart);
+        if (i < 0 || open) continue;
+        const sig = evalCloud(b, A, i, htfUp, x.cfg.adxMin);
+        if (sig) await run({ type: "pre", eid: "p:" + x.key + ":" + x.barStart, sym, side: sig.buy ? "buy" : "sell", tf: x.cfg.name, at: x.barStart + x.cfg.tf, px: b.price, sld: sig.atr * CLOUD.atrMult, rr: cloudTarget(), ...sz });
+        else delete S.pre[x.key + ":sent"];
+        if (sig) S.pre[x.key + ":sent"] = x.barStart;
+        continue;
+      }
+      // signal sur la bougie qui vient de se fermer
+      S.last[x.key] = x.barStart;
+      const i = idxOf(x.barStart);
+      const sig = i >= 0 && !open && inCloudHours(x.barStart + x.cfg.tf) ? evalCloud(b, A, i, htfUp, x.cfg.adxMin) : null;
       if (sig) {
         const buy = sig.buy, entry = b.price, dist = sig.atr * CLOUD.atrMult, k = buy ? 1 : -1;
-        const sid = m.sym + "-" + (closedT + 3600);
-        const ev = { type: "signal", eid: "s:" + sid, sid, sym: m.sym, side: buy ? "buy" : "sell", tf: "H1",
+        const sid = sym + "-" + x.cfg.name + "-" + (x.barStart + x.cfg.tf);
+        const ev = { type: "signal", eid: "s:" + sid, sid, sym, side: buy ? "buy" : "sell", tf: x.cfg.name,
           entry: +entry.toFixed(m.dg), sl: +(entry - k * dist).toFixed(m.dg), tp1: +(entry + k * dist * CLOUD.r1).toFixed(m.dg), tp: +(entry + k * dist * CLOUD.r2).toFixed(m.dg),
-          r1: CLOUD.r1, r2: CLOUD.r2, rr: cloudTarget(), lim: +(entry + k * dist * 0.2).toFixed(m.dg), vu: t + CLOUD.validMin * 60,
+          r1: CLOUD.r1, r2: CLOUD.r2, rr: cloudTarget(), lim: +(entry + k * dist * 0.2).toFixed(m.dg), vu: t + x.cfg.validMin * 60,
           slp: dist / m.pip, tpp: dist * CLOUD.r2 / m.pip, rs: sig.why, ...sz };
         await run(ev);
-        S.tracks.push({ sid, sym: m.sym, buy, entry: ev.entry, sl: ev.sl, tp1: ev.tp1, tp: ev.tp, tp1Hit: false, opened: t });
-      } else if (S.pre[m.sym] === closedT) {
-        await run({ type: "cancel", eid: "c:" + m.sym + ":" + closedT, sym: m.sym });
+        S.tracks.push({ sid, sym, tf: x.cfg.name, buy, entry: ev.entry, sl: ev.sl, tp1: ev.tp1, tp: ev.tp, tp1Hit: false, opened: t, life: x.cfg.expire });
+      } else if (S.pre[x.key + ":sent"] === x.barStart) {
+        await run({ type: "cancel", eid: "c:" + x.key + ":" + x.barStart, sym });
       }
     }
   }
-  if (needStatus && statusMarkets.length) {
-    S.status = t;
-    await kvSet(env, "status", { type: "status", ver: "cloud", tf: "H1", rr: cloudTarget(), cur: "EUR", open: S.tracks.length, markets: statusMarkets });
+
+  // ---- minute calme : mise à jour de la tendance H4 d'un marché (tour à tour)
+  if (!jobs.size || [...jobs.values()].every((j) => !j.tfs.length)) {
+    const list = CLOUD.markets.filter((m) => !S.htf[m.sym] || t - S.htf[m.sym].t > 3600);
+    const m = list[0] || CLOUD.markets[S.hp++ % CLOUD.markets.length];
+    try {
+      const b = await yahooTf(m.y, "1h", "60d");
+      const up = h4Trend(b, t);
+      if (up != null) S.htf[m.sym] = { up, t };
+      if (!m.spot) {
+        const A = analyse(b), i = b.c.length - 1;
+        S.cache[m.sym] = Object.assign(S.cache[m.sym] || {}, { px: b.price, t, sld: A.atr[i] * CLOUD.atrMult, rsi: A.rsi[i],
+          dir: up == null ? "flat" : b.c[i] > A.trend[i] && up ? "up" : b.c[i] < A.trend[i] && !up ? "down" : "flat" });
+      }
+    } catch (e) { console.log(String(e)); }
+  }
+
+  // ---- état des marchés pour l'appli (toutes les 5 minutes)
+  if (t - S.status >= 300) {
+    const markets = CLOUD.markets.filter((m) => S.cache[m.sym] && S.cache[m.sym].sld).map((m) => {
+      const c = S.cache[m.sym];
+      return { sym: m.sym, dir: c.dir || "flat", rsi: c.rsi, px: c.px, sld: c.sld, slp: c.sld / m.pip, news: "", ...cloudSizing(m, c.px, S) };
+    });
+    if (markets.length) {
+      S.status = t;
+      await kvSet(env, "status", { type: "status", ver: "cloud", tf: "H1 + M15", rr: cloudTarget(), cur: "EUR", open: S.tracks.length, markets });
+    }
   }
   await kvSet(env, "cloud", S);
   await sendAll(env, outbox);
@@ -1195,10 +1250,7 @@ async function cron(env) {
   env = await withToken(env);
   const t = now();
   if (+parisParts(t).minute % 30 === 0) await env.DB.prepare("DELETE FROM sessions WHERE expires < ?").bind(t).run();
-  // le robot MT5 est allumé ? Alors c'est lui qui envoie les signaux.
-  const mt5 = await kvGet(env, "mt5_seen");
-  if (mt5 && t - mt5.updated < ROBOT_ONLINE_SEC) return;
-  if (!marketOpen(t)) return;
+  if (!CLOUD.enabled || !marketOpen(t)) return;
   await cloudRun(env, t);
 }
 
@@ -1256,6 +1308,10 @@ async function handle(req, env, ctx) {
   if (path === "/robot/event" && method === "POST") {
     if (!sameText(req.headers.get("X-Robot-Key") || "", await robotKey(env))) return fail(403, "Clé du robot invalide.");
     const ev = await readJson(req);
+    if (CLOUD.enabled) {
+      await kvSet(env, "mt5_seen", { ver: ev.ver || "", type: ev.type || "" });
+      return json({ ok: true, ignored: "le robot du serveur envoie les signaux" });
+    }
     const out = await onRobotEvent(env, ev);
     later(out.outbox);
     return json({ ok: true, ...(out.dup ? { dup: true } : out.result) });
