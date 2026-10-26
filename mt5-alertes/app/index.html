@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AlertesPro</title>
+<meta name="description" content="Tableau de bord des alertes de trading MetaTrader 5">
+<meta name="theme-color" content="#0a0e16">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AlertesPro">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0e16; --bg2:#0e1420; --card:#121a29; --card2:#172134; --card3:#1d2940;
+  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.12);
+  --text:#e9eef7; --muted:#8b97ad; --dim:#5f6b82;
+  --buy:#1fd197; --buy-bg:rgba(31,209,151,.12);
+  --sell:#ff5a6e; --sell-bg:rgba(255,90,110,.12);
+  --accent:#7b8cff; --accent2:#a77bff; --accent-bg:rgba(123,140,255,.13);
+  --gold:#f5b94a; --gold-bg:rgba(245,185,74,.13);
+  --radius:18px; --radius-s:12px;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+html,body{background:var(--bg);color:var(--text)}
+body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.45;
+  -webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden;
+  background:
+    radial-gradient(900px 500px at 85% -10%,rgba(123,140,255,.16),transparent 60%),
+    radial-gradient(700px 420px at -10% 10%,rgba(167,123,255,.10),transparent 60%),
+    var(--bg);
+  background-attachment:fixed}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input{font:inherit;color:inherit}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.app{max-width:620px;margin:0 auto;padding:calc(12px + var(--safe-t)) 16px calc(96px + var(--safe-b))}
+
+/* En-tête */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0 18px}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 8px 24px rgba(123,140,255,.35)}
+.logo svg{width:22px;height:22px}
+.brand h1{font-size:19px;font-weight:800;letter-spacing:-.02em}
+.brand small{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-top:-2px}
+.conn{display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;background:var(--card);
+  border:1px solid var(--line);font-size:12.5px;font-weight:600;color:var(--muted);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.conn.live .dot{background:var(--buy);box-shadow:0 0 0 0 rgba(31,209,151,.6);animation:pulse 2s infinite}
+.conn.live{color:var(--text)}
+.conn.demo .dot{background:var(--gold)}
+.conn.off .dot{background:var(--sell)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,209,151,.55)}70%{box-shadow:0 0 0 8px rgba(31,209,151,0)}100%{box-shadow:0 0 0 0 rgba(31,209,151,0)}}
+
+/* Cartes */
+.card{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.stack>*+*{margin-top:14px}
+.sec-title{display:flex;align-items:center;justify-content:space-between;margin:22px 2px 10px}
+.sec-title h2{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.sec-title a,.sec-title button{font-size:13px;color:var(--accent);font-weight:600}
+.muted{color:var(--muted)} .dim{color:var(--dim)}
+.up{color:var(--buy)} .down{color:var(--sell)}
+
+/* Compte */
+.hero{position:relative;overflow:hidden;padding:20px;border-radius:22px;
+  background:linear-gradient(140deg,#1f2b4d 0%,#182038 45%,#121a29 100%);border:1px solid var(--line2)}
+.hero:after{content:"";position:absolute;right:-60px;top:-60px;width:220px;height:220px;border-radius:50%;
+  background:radial-gradient(circle,rgba(167,123,255,.35),transparent 70%)}
+.hero .lbl{font-size:12.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.hero .big{font-size:34px;font-weight:700;margin:4px 0 2px;letter-spacing:-.03em}
+.hero .day{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;padding:4px 10px;border-radius:999px;margin-top:6px}
+.hero .day.up{background:var(--buy-bg)} .hero .day.down{background:var(--sell-bg)}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:18px;position:relative;z-index:1}
+.kpi{background:rgba(10,14,22,.35);border:1px solid var(--line);border-radius:var(--radius-s);padding:10px}
+.kpi span{display:block;font-size:11.5px;color:var(--muted);font-weight:600}
+.kpi b{font-size:15px;font-weight:600}
+.updated{font-size:12px;color:var(--muted);margin-top:12px;position:relative;z-index:1}
+
+/* Signaux */
+.sig{position:relative;padding:16px;border-radius:var(--radius);border:1px solid var(--line);
+  background:linear-gradient(180deg,var(--card2),var(--card))}
+.sig.buy{box-shadow:inset 3px 0 0 var(--buy)} .sig.sell{box-shadow:inset 3px 0 0 var(--sell)}
+.sig-head{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap}
+.badge{font-size:12px;font-weight:800;letter-spacing:.06em;padding:5px 9px;border-radius:8px}
+.badge.buy{background:var(--buy-bg);color:var(--buy)} .badge.sell{background:var(--sell-bg);color:var(--sell)}
+.sig-sym{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.tf{font-size:12px;color:var(--muted);border:1px solid var(--line2);padding:2px 7px;border-radius:6px;font-weight:600}
+.ago{margin-left:auto;font-size:12.5px;color:var(--muted);white-space:nowrap}
+.new{font-size:11px;font-weight:700;color:#0a0e16;background:var(--gold);padding:2px 7px;border-radius:999px;margin-left:6px}
+.reason{font-size:13.5px;color:var(--muted);margin:8px 0 14px}
+.levels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.lv{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;text-align:left;width:100%}
+.lv span{display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:.04em}
+.lv b{display:block;font-size:14.5px;margin-top:2px;overflow:hidden;text-overflow:ellipsis}
+.lv i{font-style:normal;font-size:11.5px;color:var(--dim)}
+.lv.sl b{color:var(--sell)} .lv.tp b{color:var(--buy)}
+.lv:active{transform:scale(.98)}
+.copy-hint{font-size:11.5px;color:var(--dim);margin-top:8px}
+.rr{margin:14px 0 6px;position:relative;height:10px;display:flex;border-radius:999px;overflow:visible}
+.rr .r{background:linear-gradient(90deg,#ff5a6e,#ff8a7a);border-radius:999px 0 0 999px}
+.rr .g{background:linear-gradient(90deg,#4fe0b1,#1fd197);border-radius:0 999px 999px 0}
+.rr .mark{position:absolute;top:-5px;width:4px;height:20px;border-radius:3px;background:#fff;box-shadow:0 0 0 3px rgba(10,14,22,.8);transform:translateX(-2px)}
+.rr-lbl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--dim);font-weight:600}
+.sig-foot{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:6px 10px;border-radius:999px;background:var(--bg2);border:1px solid var(--line)}
+.chip.warn{background:var(--gold-bg);color:var(--gold);border-color:transparent}
+.chip.ok{background:var(--buy-bg);color:var(--buy);border-color:transparent}
+
+/* Marchés */
+.mk-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mk{padding:14px;border-radius:var(--radius);background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line)}
+.mk-top{display:flex;align-items:center;justify-content:space-between}
+.mk-sym{font-weight:800;font-size:15.5px;letter-spacing:-.01em}
+.trend{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:3px 8px;border-radius:999px}
+.trend.up{background:var(--buy-bg)} .trend.down{background:var(--sell-bg)}
+.trend.flat{background:var(--card3);color:var(--muted)}
+.mk-px{font-size:19px;font-weight:600;margin:8px 0 10px}
+.gauge{position:relative;height:6px;border-radius:999px;background:linear-gradient(90deg,var(--buy) 0 30%,var(--card3) 30% 70%,var(--sell) 70% 100%);opacity:.9}
+.gauge i{position:absolute;top:-4px;width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid var(--bg);transform:translateX(-7px)}
+.mk-meta{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 8px;font-size:12px;color:var(--muted);margin-top:9px;font-weight:500}
+.mk-meta span{white-space:nowrap}
+.newsflag{display:inline-flex;align-items:center;gap:4px;color:var(--gold);font-weight:700}
+
+/* Flux d'alertes */
+.filters{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 12px;margin:0 -2px;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.filters button{flex:none;font-size:13px;font-weight:600;padding:8px 13px;border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--muted)}
+.filters button.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.feed{display:flex;flex-direction:column;gap:8px}
+.it{display:flex;gap:12px;padding:13px;border-radius:var(--radius-s);background:var(--card);border:1px solid var(--line)}
+.ic{flex:none;width:36px;height:36px;border-radius:11px;display:grid;place-items:center}
+.ic svg{width:18px;height:18px}
+.ic.signal{background:var(--accent-bg);color:var(--accent)}
+.ic.news{background:var(--gold-bg);color:var(--gold)}
+.ic.trade{background:var(--buy-bg);color:var(--buy)}
+.ic.trade.loss{background:var(--sell-bg);color:var(--sell)}
+.ic.account{background:var(--sell-bg);color:var(--sell)}
+.ic.line,.ic.market{background:rgba(94,200,255,.12);color:#5ec8ff}
+.ic.summary,.ic.info{background:var(--card3);color:var(--muted)}
+.it-body{min-width:0;flex:1}
+.it-title{font-weight:600;font-size:14px;display:flex;justify-content:space-between;gap:10px}
+.it-title time{flex:none;font-weight:500;font-size:12px;color:var(--dim)}
+.it-text{font-size:13px;color:var(--muted);margin-top:3px;white-space:pre-line;word-wrap:break-word}
+
+/* Positions */
+.pos{display:flex;align-items:center;gap:12px;padding:12px 14px}
+.pos+.pos{border-top:1px solid var(--line)}
+.pos .s{font-weight:700} .pos .v{font-size:12.5px;color:var(--muted)}
+.pos .pl{margin-left:auto;text-align:right;font-weight:600}
+.nosl{font-size:11px;font-weight:700;color:var(--gold)}
+
+/* Vide */
+.empty{text-align:center;padding:34px 20px;color:var(--muted)}
+.empty svg{width:42px;height:42px;color:var(--dim);margin-bottom:10px}
+.empty b{display:block;color:var(--text);font-size:15px;margin-bottom:4px}
+
+/* Formulaires */
+.field{display:block;margin-top:12px}
+.field span{display:block;font-size:12.5px;color:var(--muted);font-weight:600;margin-bottom:6px}
+.input{width:100%;padding:12px 13px;border-radius:var(--radius-s);background:var(--bg2);border:1px solid var(--line2);outline:none;font-size:15px}
+.input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.row{display:flex;gap:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px;border-radius:var(--radius-s);font-weight:700;font-size:14.5px;background:var(--card3);border:1px solid var(--line2);white-space:nowrap}
+.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;color:#fff;box-shadow:0 8px 22px rgba(123,140,255,.3)}
+.btn.block{width:100%}
+.btn:active{transform:scale(.98)}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 0}
+.toggle+.toggle{border-top:1px solid var(--line)}
+.toggle b{font-weight:600;font-size:14.5px} .toggle small{display:block;color:var(--muted);font-size:12.5px}
+.sw{position:relative;flex:none;width:46px;height:28px;border-radius:999px;background:var(--card3);border:1px solid var(--line2);transition:.2s}
+.sw:after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}
+.sw.on{background:var(--buy);border-color:var(--buy)} .sw.on:after{left:21px}
+.steps{counter-reset:s;list-style:none}
+.steps li{counter-increment:s;position:relative;padding:0 0 12px 36px;font-size:14px;color:var(--muted)}
+.steps li b{color:var(--text)}
+.steps li:before{content:counter(s);position:absolute;left:0;top:-1px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  font-size:12px;font-weight:700;background:var(--accent-bg);color:var(--accent)}
+code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 6px;border-radius:6px;color:var(--text);word-break:break-all}
+.calc-out{display:flex;align-items:baseline;justify-content:space-between;margin-top:14px;padding:14px;border-radius:var(--radius-s);background:var(--accent-bg)}
+.calc-out b{font-size:24px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.rules{display:grid;gap:8px}
+.rule{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;color:var(--muted)}
+.rule svg{flex:none;width:18px;height:18px;color:var(--buy);margin-top:1px}
+
+/* Navigation */
+.nav{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(12px + var(--safe-b));z-index:20;
+  width:min(588px,calc(100% - 24px));display:grid;grid-template-columns:repeat(5,1fr);padding:6px;
+  border-radius:22px;background:rgba(18,26,41,.82);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  border:1px solid var(--line2);box-shadow:0 18px 40px rgba(0,0,0,.45)}
+.nav button{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0 6px;border-radius:16px;font-size:11px;font-weight:600;color:var(--dim)}
+.nav button svg{width:22px;height:22px}
+.nav button.on{color:var(--text);background:var(--card3)}
+.nav .count{position:absolute;top:3px;right:calc(50% - 22px);min-width:17px;height:17px;padding:0 5px;border-radius:999px;background:var(--sell);color:#fff;font-size:10.5px;font-weight:700;display:grid;place-items:center}
+.view{display:none;animation:fade .25s ease}
+.view.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.toast{position:fixed;left:50%;bottom:calc(100px + var(--safe-b));transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;
+  background:var(--text);color:var(--bg);font-weight:600;font-size:14px;padding:11px 16px;border-radius:12px;transition:.25s;z-index:30;max-width:calc(100% - 32px);text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.banner{display:flex;gap:12px;align-items:center;padding:14px;border-radius:var(--radius);background:var(--gold-bg);border:1px solid rgba(245,185,74,.25);margin-bottom:14px}
+.banner p{font-size:13.5px;flex:1} .banner b{color:var(--gold)}
+.disclaimer{font-size:12px;color:var(--dim);text-align:center;margin:26px 10px 0;line-height:1.5}
+@media (max-width:380px){.levels{grid-template-columns:1fr}.mk-grid{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg></div>
+      <div><h1>AlertesPro</h1><small>MetaTrader 5</small></div>
+    </div>
+    <button class="conn" id="conn" aria-label="État de la connexion"><span class="dot"></span><span id="connTxt">…</span></button>
+  </header>
+
+  <!-- ACCUEIL -->
+  <section class="view on" id="v-home">
+    <div id="setupBanner"></div>
+    <div id="hero"></div>
+    <div class="sec-title"><h2>Dernier signal</h2><button data-go="signals">Tous les signaux</button></div>
+    <div id="lastSignal"></div>
+    <div id="posWrap"></div>
+    <div class="sec-title"><h2>Annonces à venir</h2></div>
+    <div id="newsList"></div>
+    <div class="sec-title"><h2>Calculatrice de lot</h2></div>
+    <div class="card">
+      <div class="grid2">
+        <label class="field"><span>Capital</span><input class="input num" id="cCap" inputmode="decimal" value="10000"></label>
+        <label class="field"><span>Risque %</span><input class="input num" id="cRisk" inputmode="decimal" value="1"></label>
+        <label class="field"><span>Stop (pips)</span><input class="input num" id="cSl" inputmode="decimal" value="30"></label>
+        <label class="field"><span>Valeur du pip / lot</span><input class="input num" id="cPip" inputmode="decimal" value="10"></label>
+      </div>
+      <div class="calc-out"><div><div class="muted" style="font-size:12.5px;font-weight:600">Lot à prendre</div><b class="num" id="cLot">0.33</b></div>
+        <div style="text-align:right"><div class="muted" style="font-size:12.5px;font-weight:600">Perte max</div><b class="num" id="cMax" style="font-size:17px">100</b></div></div>
+      <p class="dim" style="font-size:12px;margin-top:10px">Valeur du pip : environ 10 pour EURUSD ou GBPUSD (compte en USD ou EUR, 1 lot standard). Elle change selon l'actif : vérifie-la dans MT5.</p>
+    </div>
+    <div class="sec-title"><h2>Les règles</h2></div>
+    <div class="card rules" id="rules"></div>
+  </section>
+
+  <!-- SIGNAUX -->
+  <section class="view" id="v-signals">
+    <div class="sec-title" style="margin-top:4px"><h2>Signaux de trading</h2><span class="muted" style="font-size:13px" id="sigCount"></span></div>
+    <div class="filters" id="sigFilters"></div>
+    <div class="stack" id="sigList"></div>
+  </section>
+
+  <!-- MARCHÉS -->
+  <section class="view" id="v-markets">
+    <div class="sec-title" style="margin-top:4px"><h2>Marchés</h2><span class="muted" style="font-size:13px" id="mkTf"></span></div>
+    <div id="mkList"></div>
+    <div class="sec-title"><h2>Résumé du matin</h2></div>
+    <div id="summary"></div>
+  </section>
+
+  <!-- ALERTES -->
+  <section class="view" id="v-feed">
+    <div class="sec-title" style="margin-top:4px"><h2>Toutes les alertes</h2></div>
+    <div class="filters" id="feedFilters"></div>
+    <div class="feed" id="feed"></div>
+  </section>
+
+  <!-- RÉGLAGES -->
+  <section class="view" id="v-settings">
+    <div class="sec-title" style="margin-top:4px"><h2>Connexion au robot</h2></div>
+    <div class="card">
+      <label class="field" style="margin-top:0"><span>Code de connexion</span>
+        <div class="row"><input class="input num" id="code" placeholder="alertespro-…" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button class="btn" id="copyCode" aria-label="Copier le code">Copier</button></div></label>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" id="genCode" style="flex:1">Nouveau code</button>
+        <button class="btn primary" id="saveCode" style="flex:1">Se connecter</button>
+      </div>
+      <button class="btn block" id="testBtn" style="margin-top:10px">Envoyer un message de test</button>
+    </div>
+
+    <div class="sec-title"><h2>Mise en route</h2></div>
+    <div class="card">
+      <ol class="steps">
+        <li>Appuie sur <b>Nouveau code</b>, puis <b>Copier</b>.</li>
+        <li>Dans MT5 : <b>Outils › Options › Expert Advisors</b>, coche <i>Autoriser WebRequest</i> et ajoute <code>https://ntfy.sh</code>.</li>
+        <li>Dans les paramètres d'AlertesPro, colle le code dans <b>Appli : code de connexion</b>.</li>
+        <li>Reviens ici et appuie sur <b>Se connecter</b>. Le message « AlertesPro démarré » apparaît dans Alertes.</li>
+        <li>Sur iPhone : <b>Partager › Sur l'écran d'accueil</b>. Sur Android : <b>⋮ › Installer l'application</b>.</li>
+      </ol>
+      <p class="dim" style="font-size:12.5px">Garde ton code pour toi : quiconque le connaît peut lire tes alertes. Les messages restent 12 h sur le relais, l'historique est gardé sur ton téléphone.</p>
+    </div>
+
+    <div class="sec-title"><h2>Préférences</h2></div>
+    <div class="card" style="padding-top:4px;padding-bottom:4px">
+      <div class="toggle"><div><b>Notifications</b><small>Quand l'appli est ouverte en arrière-plan</small></div><button class="sw" id="swNotif" aria-label="Notifications"></button></div>
+      <div class="toggle"><div><b>Son pour les signaux</b><small>Un petit bip à chaque signal</small></div><button class="sw" id="swSound" aria-label="Son"></button></div>
+      <div class="toggle"><div><b>Mode démo</b><small>Données d'exemple pour découvrir l'appli</small></div><button class="sw" id="swDemo" aria-label="Mode démo"></button></div>
+    </div>
+    <button class="btn block" id="clearBtn" style="margin-top:14px;color:var(--sell)">Effacer l'historique</button>
+    <p class="disclaimer">AlertesPro ne passe aucun ordre et ne garantit aucun gain. Le trading à effet de levier peut faire perdre plus que prévu. Teste toujours sur un compte démo avant de risquer de l'argent réel.</p>
+  </section>
+</div>
+
+<nav class="nav" id="nav">
+  <button class="on" data-view="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Accueil</button>
+  <button data-view="signals"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg>Signaux<span class="count" id="sigBadge" hidden></span></button>
+  <button data-view="markets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>Marchés</button>
+  <button data-view="feed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>Alertes<span class="count" id="feedBadge" hidden></span></button>
+  <button data-view="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Réglages</button>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  "use strict";
+  const RELAY = "https://ntfy.sh";
+  const MAX_MSG = 400;
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- Stockage local (préférences + historique sur cet appareil) ----------
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem("ap_" + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem("ap_" + k, JSON.stringify(v)); } catch (e) {} }
+  };
+
+  const S = {
+    code: store.get("code", ""),
+    demo: store.get("demo", false),
+    notif: store.get("notif", false),
+    sound: store.get("sound", true),
+    msgs: store.get("msgs", []),
+    seen: store.get("seen", { signals: 0, feed: 0 }),
+    view: "home",
+    conn: "off",
+    sigFilter: "all",
+    feedFilter: "all"
+  };
+
+  // ---------- Utilitaires ----------
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const num = (v) => { const n = parseFloat(String(v).replace(",", ".")); return isFinite(n) ? n : NaN; };
+  const fmt = (n, d = 2) => isFinite(n) ? n.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }) : "–";
+  const money = (n, cur) => (n > 0 ? "+" : "") + fmt(n) + (cur ? " " + cur : "");
+  const decimals = (s) => { const p = String(s).split("."); return p[1] ? p[1].length : 0; };
+  const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
+
+  function ago(t) {
+    const s = Math.max(0, Date.now() / 1000 - t);
+    if (s < 60) return "à l'instant";
+    if (s < 3600) return "il y a " + Math.floor(s / 60) + " min";
+    if (s < 86400) return "il y a " + Math.floor(s / 3600) + " h";
+    return new Date(t * 1000).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  }
+  const hhmm = (t) => new Date(t * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+  function toast(txt) {
+    const el = $("toast"); el.textContent = txt; el.classList.add("show");
+    clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 2200);
+  }
+
+  async function copy(txt) {
+    try { await navigator.clipboard.writeText(txt); toast("Copié : " + txt); }
+    catch (e) { toast(txt); }
+  }
+
+  // tags "cle=valeur" -> objet (m et p peuvent se répéter)
+  function parse(m) {
+    const d = { m: [], p: [] };
+    (m.tags || []).forEach((t) => {
+      const i = t.indexOf("=");
+      if (i < 1) return;
+      const k = t.slice(0, i).toLowerCase(), v = t.slice(i + 1);
+      if (k === "m" || k === "p") d[k].push(v.split("|")); else d[k] = v;
+    });
+    return { id: m.id, time: m.time, title: m.title || "", message: m.message || "", kind: (d.k || "info").toLowerCase(), d };
+  }
+
+  // ---------- Icônes ----------
+  const ICONS = {
+    signal: '<path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/>',
+    news: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    trade: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+    account: '<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+    line: '<path d="M3 12h18"/><path d="M3 6l4 3 4-4 4 5 6-4" opacity=".5"/>',
+    market: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
+    summary: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/>',
+    check: '<path d="M20 6L9 17l-5-5"/>',
+    inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/>'
+  };
+  const icon = (k) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[k] || ICONS.info) + "</svg>";
+  const empty = (title, txt) => '<div class="card empty">' + icon("inbox") + "<b>" + esc(title) + "</b>" + esc(txt) + "</div>";
+
+  // ---------- Données ----------
+  const all = () => S.msgs.map(parse).sort((a, b) => b.time - a.time);
+  const lastStatus = () => all().find((m) => m.kind === "status");
+
+  function addMessages(list, live) {
+    const known = new Set(S.msgs.map((m) => m.id));
+    const fresh = list.filter((m) => m && m.id && !known.has(m.id));
+    if (!fresh.length) return;
+    S.msgs = S.msgs.concat(fresh).sort((a, b) => a.time - b.time);
+    // on garde seulement le dernier statut et les MAX_MSG derniers messages
+    const statuses = S.msgs.filter((m) => (m.tags || []).includes("k=status"));
+    const keep = statuses.slice(-1).map((m) => m.id);
+    S.msgs = S.msgs.filter((m) => !(m.tags || []).includes("k=status") || keep.includes(m.id)).slice(-MAX_MSG);
+    if (!S.demo) store.set("msgs", S.msgs);
+    if (live) fresh.map(parse).filter((m) => m.kind !== "status").forEach(alertUser);
+    render();
+  }
+
+  function alertUser(m) {
+    if (S.sound && m.kind === "signal") beep();
+    if (S.notif && document.hidden && "Notification" in window && Notification.permission === "granted") {
+      try { new Notification(m.title || "AlertesPro", { body: m.message.slice(0, 180), icon: "icon-180.png", tag: m.id }); } catch (e) {}
+    }
+  }
+
+  let audio;
+  function beep() {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      [0, 0.16].forEach((dt, i) => {
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.frequency.value = i ? 1046 : 784; o.type = "sine";
+        g.gain.setValueAtTime(0.0001, audio.currentTime + dt);
+        g.gain.exponentialRampToValueAtTime(0.18, audio.currentTime + dt + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + dt + 0.22);
+        o.connect(g).connect(audio.destination); o.start(audio.currentTime + dt); o.stop(audio.currentTime + dt + 0.25);
+      });
+    } catch (e) {}
+  }
+
+  // ---------- Connexion au relais ----------
+  let es = null, retry = 0, retryT = null;
+
+  function setConn(state) {
+    S.conn = state;
+    const el = $("conn");
+    el.className = "conn " + state;
+    $("connTxt").textContent = { live: "En direct", demo: "Démo", off: S.code ? "Hors ligne" : "Non connecté", wait: "Connexion…" }[state];
+  }
+
+  async function poll() {
+    if (!S.code) return;
+    const lastId = S.msgs.length ? S.msgs[S.msgs.length - 1].id : null;
+    const since = lastId || "12h";
+    const r = await fetch(RELAY + "/" + encodeURIComponent(S.code) + "/json?poll=1&since=" + encodeURIComponent(since));
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const txt = await r.text();
+    const list = txt.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch (e) { return null; } })
+      .filter((m) => m && m.event === "message");
+    addMessages(list, false);
+  }
+
+  function connect() {
+    if (es) { es.close(); es = null; }
+    clearTimeout(retryT);
+    if (S.demo) { setConn("demo"); return; }
+    if (!S.code) { setConn("off"); return; }
+    setConn("wait");
+    poll().catch(() => {}).finally(() => {
+      if (S.demo || !S.code) return;
+      try {
+        es = new EventSource(RELAY + "/" + encodeURIComponent(S.code) + "/sse");
+        es.onopen = () => { retry = 0; setConn("live"); };
+        es.onmessage = (e) => { try { const m = JSON.parse(e.data); if (m.event === "message") addMessages([m], true); } catch (x) {} };
+        es.onerror = () => {
+          setConn("off"); es.close(); es = null;
+          retryT = setTimeout(connect, Math.min(30000, 2000 * Math.pow(2, retry++)));
+        };
+      } catch (e) { setConn("off"); }
+    });
+  }
+
+  async function sendTest() {
+    if (S.demo) return toast("Désactive le mode démo pour tester.");
+    if (!S.code) return toast("Crée ou colle d'abord un code.");
+    try {
+      const r = await fetch(RELAY + "/", { method: "POST", body: JSON.stringify({
+        topic: S.code, title: "Test de l'appli", message: "La connexion fonctionne. Les alertes du robot apparaîtront ici.", tags: ["k=info"], priority: 2 }) });
+      toast(r.ok ? "Message envoyé, il arrive dans Alertes." : "Échec de l'envoi (" + r.status + ")");
+    } catch (e) { toast("Pas de connexion internet ?"); }
+  }
+
+  // ---------- Rendus ----------
+  function renderHero() {
+    const st = lastStatus();
+    if (!st) {
+      $("hero").innerHTML = '<div class="hero"><div class="lbl">Équité</div><div class="big num">–</div>' +
+        '<div class="updated">En attente des données du robot. Elles arrivent toutes les 15 min une fois le robot connecté.</div></div>';
+      return;
+    }
+    const d = st.d, cur = d.cur || "", day = num(d.day), bal = num(d.bal), eq = num(d.eq), ml = num(d.ml);
+    const pct = eq - day > 0 ? day / (eq - day) * 100 : NaN;
+    const dayCls = day >= 0 ? "up" : "down";
+    $("hero").innerHTML =
+      '<div class="hero"><div class="lbl">Équité</div>' +
+      '<div class="big num">' + fmt(eq) + ' <span style="font-size:18px;color:var(--muted)">' + esc(cur) + "</span></div>" +
+      '<div class="day ' + dayCls + '"><span class="num">' + money(day, cur) + "</span>" + (isFinite(pct) ? '<span class="num" style="opacity:.8">(' + (pct > 0 ? "+" : "") + fmt(pct, 1) + " %)</span>" : "") + " aujourd'hui</div>" +
+      '<div class="kpis"><div class="kpi"><span>Solde</span><b class="num">' + fmt(bal, 0) + "</b></div>" +
+      '<div class="kpi"><span>Marge</span><b class="num' + (ml > 0 && ml < 300 ? " down" : "") + '">' + (ml > 0 ? fmt(ml, 0) + " %" : "–") + "</b></div>" +
+      '<div class="kpi"><span>Positions</span><b class="num">' + esc(d.pos || 0) + "</b></div></div>" +
+      '<div class="updated">Mis à jour ' + ago(st.time) + " · risque " + esc(d.risk || "1") + " % par trade · " + esc(d.tf || "") + "</div></div>";
+  }
+
+  function marketPrice(sym) {
+    const st = lastStatus(); if (!st) return null;
+    const row = st.d.m.find((r) => (r[0] || "").toUpperCase() === sym.toUpperCase());
+    return row ? num(row[4]) : null;
+  }
+
+  function signalCard(m, compact) {
+    const d = m.d, buy = (d.side || "").toLowerCase() === "buy", side = buy ? "buy" : "sell";
+    const sym = (d.sym || "").toUpperCase(), rr = num(d.rr) || 2;
+    const entry = num(d.entry), sl = num(d.sl), tp = num(d.tp), dg = Math.max(decimals(d.entry), decimals(d.sl));
+    const lines = m.message.split("\n");
+    const reason = lines[1] || "";
+    const isNew = Date.now() / 1000 - m.time < 3600;
+    const price = marketPrice(sym);
+    let mark = "", progress = "";
+    if (price && isFinite(sl) && isFinite(tp) && tp !== sl && Date.now() / 1000 - m.time < 3 * 86400) {
+      const pos = buy ? (price - sl) / (tp - sl) : (sl - price) / (sl - tp);
+      const c = Math.max(0, Math.min(1, pos));
+      mark = '<i class="mark" style="left:' + (c * 100).toFixed(1) + '%"></i>';
+      const toTp = buy ? (price - entry) / (tp - entry) : (entry - price) / (entry - tp);
+      const pctTxt = toTp >= 0 ? fmt(Math.min(toTp, 1) * 100, 0) + " % vers le TP" : fmt(Math.min(-toTp * rr, 1) * 100, 0) + " % vers le SL";
+      progress = '<span class="chip ' + (toTp >= 0 ? "ok" : "warn") + '">Prix actuel <span class="num">' + price.toFixed(dg) + "</span> · " + pctTxt + "</span>";
+    }
+    const lotTxt = num(d.lot) > 0 ? '<span class="chip">Lot <b class="num">' + esc(d.lot) + '</b></span><span class="chip">Risque <b class="num">' + fmt(num(d.risk)) + " " + esc(d.cur || "") + "</b></span>"
+      : '<span class="chip warn">Lot minimum trop gros : passe ton tour</span>';
+    const newsWarn = /Attention annonce/.test(m.message) ? '<span class="chip warn">Annonce proche</span>' : "";
+    const lv = (cls, lbl, val, sub) => '<button class="lv ' + cls + '" data-copy="' + esc(val) + '"><span>' + lbl + "</span><b class=\"num\">" + esc(val) + "</b>" + (sub ? "<i>" + sub + "</i>" : "") + "</button>";
+    return '<article class="sig ' + side + '">' +
+      '<div class="sig-head"><span class="badge ' + side + '">' + (buy ? "ACHAT" : "VENTE") + '</span><span class="sig-sym">' + esc(sym) + '</span><span class="tf">' + esc(d.tf || "") + "</span>" +
+      '<span class="ago">' + ago(m.time) + "</span>" + (isNew ? '<span class="new">NOUVEAU</span>' : "") + "</div>" +
+      '<p class="reason">' + esc(reason) + "</p>" +
+      '<div class="levels">' + lv("", "ENTRÉE", d.entry, "") + lv("sl", "STOP", d.sl, esc(d.slp || "") + " pips") + lv("tp", "OBJECTIF", d.tp, esc(d.tpp || "") + " pips") + "</div>" + '<p class="copy-hint">Touche un prix pour le copier.</p>' +
+      (compact ? "" : '<div class="rr"><div class="r" style="flex:1"></div><div class="g" style="flex:' + rr + '"></div>' + mark + "</div>" +
+      '<div class="rr-lbl"><span>SL</span><span>Entrée</span><span>TP · ratio 1:' + fmt(rr, rr % 1 ? 1 : 0) + "</span></div>") +
+      '<div class="sig-foot">' + lotTxt + newsWarn + progress + "</div></article>";
+  }
+
+  function renderSignals() {
+    const sigs = all().filter((m) => m.kind === "signal");
+    const syms = [...new Set(sigs.map((m) => (m.d.sym || "").toUpperCase()))];
+    const f = S.sigFilter;
+    $("sigFilters").innerHTML = ["all", "buy", "sell"].concat(syms).map((k) =>
+      '<button data-sf="' + esc(k) + '" class="' + (f === k ? "on" : "") + '">' + esc({ all: "Tous", buy: "Achats", sell: "Ventes" }[k] || k) + "</button>").join("");
+    const list = sigs.filter((m) => f === "all" || (f === "buy" || f === "sell" ? (m.d.side || "").toLowerCase() === f : (m.d.sym || "").toUpperCase() === f));
+    $("sigCount").textContent = sigs.length ? sigs.length + " signal" + (sigs.length > 1 ? "s" : "") : "";
+    $("sigList").innerHTML = list.length ? list.map((m) => signalCard(m, false)).join("")
+      : empty("Aucun signal pour l'instant", "Le robot n'envoie un signal que si tendance, déclencheur, calendrier et spread sont bons. C'est normal d'attendre.");
+    $("lastSignal").innerHTML = sigs.length ? signalCard(sigs[0], false) : empty("Pas encore de signal", "Ils apparaîtront ici dès que le robot en trouve un.");
+  }
+
+  function renderMarkets() {
+    const st = lastStatus();
+    $("mkTf").textContent = st && st.d.tf ? "Unité de temps " + st.d.tf : "";
+    if (!st || !st.d.m.length) {
+      $("mkList").innerHTML = empty("Pas de données marché", "Le robot envoie l'état des marchés toutes les 15 minutes.");
+    } else {
+      $("mkList").innerHTML = '<div class="mk-grid">' + st.d.m.map((r) => {
+        const [sym, dir, rsi, atr, px, news] = r, rv = num(rsi);
+        const t = dir === "up" ? '<span class="trend up">▲ Hausse</span>' : dir === "down" ? '<span class="trend down">▼ Baisse</span>' : '<span class="trend flat">–</span>';
+        const zone = rv >= 70 ? "Surachat" : rv <= 30 ? "Survente" : "Neutre";
+        return '<div class="mk"><div class="mk-top"><span class="mk-sym">' + esc(sym) + "</span>" + t + "</div>" +
+          '<div class="mk-px num">' + esc(px || "–") + "</div>" +
+          '<div class="gauge" title="RSI"><i style="left:' + Math.max(0, Math.min(100, rv || 50)) + '%"></i></div>' +
+          '<div class="mk-meta"><span>RSI <b class="num" style="color:var(--text)">' + fmt(rv, 0) + "</b> · " + zone + "</span>" +
+          (news === "1" ? '<span class="newsflag">● Annonce</span>' : "<span>ATR " + fmt(num(atr), 0) + " p</span>") + "</div></div>";
+      }).join("") + "</div>";
+    }
+    const sum = all().find((m) => m.kind === "summary");
+    $("summary").innerHTML = sum ? '<div class="card"><div class="it-title" style="margin-bottom:8px"><span>' + esc(sum.title) + "</span><time>" + ago(sum.time) + '</time></div><div class="it-text num" style="font-size:13px;line-height:1.7">' + esc(sum.message.split("\n").slice(1).join("\n")) + "</div></div>"
+      : empty("Pas encore de résumé", "Il arrive chaque matin de semaine à 8 h.");
+  }
+
+  function renderPositions() {
+    const st = lastStatus();
+    if (!st || !st.d.p.length) { $("posWrap").innerHTML = ""; return; }
+    const cur = st.d.cur || "";
+    $("posWrap").innerHTML = '<div class="sec-title"><h2>Positions ouvertes</h2><span class="muted" style="font-size:12.5px">' + ago(st.time) + "</span></div>" +
+      '<div class="card" style="padding:4px 0">' + st.d.p.map(([sym, side, vol, pl, hasSl]) => {
+        const v = num(pl);
+        return '<div class="pos"><span class="badge ' + (side === "buy" ? "buy" : "sell") + '">' + (side === "buy" ? "ACHAT" : "VENTE") + "</span>" +
+          '<div><div class="s">' + esc(sym) + '</div><div class="v num">' + esc(vol) + " lot " + (hasSl === "1" ? "" : '<span class="nosl">· SANS STOP</span>') + "</div></div>" +
+          '<div class="pl num ' + (v >= 0 ? "up" : "down") + '">' + money(v, cur) + "</div></div>";
+      }).join("") + "</div>";
+  }
+
+  function renderNews() {
+    const now = Date.now() / 1000;
+    const items = all().filter((m) => m.kind === "news").map((m) => ({ m, at: m.time + (num(m.d.min) || 0) * 60 }))
+      .filter((x) => x.at > now - 3600).sort((a, b) => a.at - b.at);
+    $("newsList").innerHTML = items.length ? '<div class="feed">' + items.map(({ m, at }) => {
+      const mins = Math.round((at - now) / 60);
+      const when = mins > 0 ? "dans " + mins + " min" : mins > -5 ? "maintenant" : "il y a " + -mins + " min";
+      return '<div class="it"><div class="ic news">' + icon("news") + '</div><div class="it-body"><div class="it-title"><span>' + esc((m.title.split(" : ")[1] || m.title)) + "</span><time>" + hhmm(at) + '</time></div><div class="it-text">' + esc(m.d.cur || "") + " · " + when + "</div></div></div>";
+    }).join("") + "</div>" : '<div class="card" style="display:flex;gap:12px;align-items:center"><div class="ic news">' + icon("news") + '</div><div class="muted" style="font-size:13.5px">Aucune annonce forte dans les prochaines 30 min. Le robot te prévient avant chacune.</div></div>';
+  }
+
+  const FEED_KINDS = { all: "Tout", signal: "Signaux", news: "Annonces", trade: "Positions", account: "Compte", line: "Lignes", market: "Marché", summary: "Résumés", info: "Infos" };
+  function renderFeed() {
+    const msgs = all().filter((m) => m.kind !== "status");
+    const present = new Set(msgs.map((m) => m.kind));
+    $("feedFilters").innerHTML = Object.keys(FEED_KINDS).filter((k) => k === "all" || present.has(k)).map((k) =>
+      '<button data-ff="' + k + '" class="' + (S.feedFilter === k ? "on" : "") + '">' + FEED_KINDS[k] + "</button>").join("");
+    const list = msgs.filter((m) => S.feedFilter === "all" || m.kind === S.feedFilter);
+    $("feed").innerHTML = list.length ? list.map((m) => {
+      const loss = m.kind === "trade" && num(m.d.profit) < 0;
+      const body = m.message.split("\n").slice(m.message.indexOf("\n") > 0 ? 1 : 0).join("\n");
+      const text = body === m.title ? "" : body;
+      return '<div class="it"><div class="ic ' + esc(m.kind) + (loss ? " loss" : "") + '">' + icon(m.kind) + '</div><div class="it-body"><div class="it-title"><span>' + esc(m.title) + "</span><time>" + hhmm(m.time) + "</time></div>" +
+        (text ? '<div class="it-text">' + esc(text) + "</div>" : "") + "</div></div>";
+    }).join("") : empty("Rien pour le moment", S.code || S.demo ? "Les alertes du robot s'afficheront ici en direct." : "Connecte le robot dans Réglages.");
+  }
+
+  function renderBanner() {
+    $("setupBanner").innerHTML = (!S.code && !S.demo)
+      ? '<div class="banner"><div class="ic news">' + icon("info") + '</div><p><b>Connecte ton robot</b><br>Crée ton code dans Réglages, ou essaie le mode démo.</p><button class="btn" data-go="settings">Régler</button></div>' : "";
+  }
+
+  function renderBadges() {
+    const msgs = all();
+    const sigNew = msgs.filter((m) => m.kind === "signal" && m.time > S.seen.signals).length;
+    const feedNew = msgs.filter((m) => m.kind !== "status" && m.time > S.seen.feed).length;
+    const sb = $("sigBadge"), fb = $("feedBadge");
+    sb.hidden = !sigNew || S.view === "signals"; sb.textContent = sigNew > 9 ? "9+" : sigNew;
+    fb.hidden = !feedNew || S.view === "feed"; fb.textContent = feedNew > 9 ? "9+" : feedNew;
+  }
+
+  const RULES = ["Toujours un stop loss, placé dès l'entrée. Ne jamais le reculer.", "1 % de risque par trade, 2 % au grand maximum.",
+    "Après 3 % de perte dans la journée, on arrête jusqu'au lendemain.", "Pas d'entrée juste avant une annonce forte.",
+    "Pas deux positions sur la même devise dans le même sens.", "Un signal n'est pas une obligation : si le graphique ne te plaît pas, passe ton tour."];
+
+  function render() {
+    renderBanner(); renderHero(); renderSignals(); renderPositions(); renderNews(); renderMarkets(); renderFeed(); renderBadges();
+  }
+
+  // ---------- Calculatrice ----------
+  function calc() {
+    const capV = num($("cCap").value), r = num($("cRisk").value), sl = num($("cSl").value), pip = num($("cPip").value);
+    const riskMoney = capV * r / 100;
+    const lot = sl > 0 && pip > 0 ? Math.floor(riskMoney / (sl * pip) * 100) / 100 : NaN;
+    $("cLot").textContent = isFinite(lot) ? fmt(lot) : "–";
+    $("cMax").textContent = isFinite(lot) ? fmt(lot * sl * pip) : "–";
+    store.set("calc", [$("cCap").value, $("cRisk").value, $("cSl").value, $("cPip").value]);
+  }
+
+  // ---------- Démo ----------
+  function demoData() {
+    const now = Math.floor(Date.now() / 1000);
+    let i = 0;
+    const mk = (ago, kind, title, message, tags) => ({ id: "demo" + (i++), time: now - ago, event: "message", title, message, tags: ["k=" + kind].concat(tags || []) });
+    return [
+      mk(30, "status", "Statut", "Mise à jour du compte", ["bal=10000.00", "eq=10142.60", "cur=EUR", "day=86.40", "ml=1840", "pos=2", "tf=H1", "risk=1.0",
+        "m=EURUSD|up|58.4|14.2|1.08734|0", "m=GBPUSD|up|63.1|17.9|1.27612|0", "m=USDJPY|down|41.7|21.3|149.218|1", "m=XAUUSD|up|71.3|268.0|2384.15|1",
+        "p=EURUSD|buy|0.31|98.20|1", "p=XAUUSD|buy|0.05|44.40|1"]),
+      mk(600, "signal", "SIGNAL ACHAT EURUSD H1", "SIGNAL ACHAT EURUSD H1\nCroisement haussier MM20/MM50, prix au-dessus de l'EMA200\nEntrée 1.08512\nSL 1.08197 (31.5 pips)\nTP 1.09142 (63.0 pips)\nLot 0.31 = risque 97.65 EUR (1.0 %)",
+        ["sym=EURUSD", "side=buy", "tf=H1", "entry=1.08512", "sl=1.08197", "tp=1.09142", "slp=31.5", "tpp=63.0", "lot=0.31", "risk=97.65", "cur=EUR", "rr=2.0"]),
+      mk(540, "trade", "Position ouverte : ACHAT EURUSD 0.31 lot à 1.08515", "Position ouverte : ACHAT EURUSD 0.31 lot à 1.08515", ["sym=EURUSD", "side=buy", "ev=open"]),
+      mk(1500, "news", "ANNONCE FORTE dans 30 min : USD - Nonfarm Payrolls", "ANNONCE FORTE dans 30 min : USD - Nonfarm Payrolls\nLe marché peut bouger fort. Évite d'entrer juste avant et vérifie tes stops sur USD.", ["cur=USD", "min=30"]),
+      mk(5400, "signal", "SIGNAL VENTE USDJPY H1", "SIGNAL VENTE USDJPY H1\nRepli du RSI depuis le surachat, tendance baissière (EMA200)\nEntrée 149.682\nSL 150.002 (32.0 pips)\nTP 149.042 (64.0 pips)\nLot 0.46 = risque 98.90 EUR (1.0 %)",
+        ["sym=USDJPY", "side=sell", "tf=H1", "entry=149.682", "sl=150.002", "tp=149.042", "slp=32.0", "tpp=64.0", "lot=0.46", "risk=98.90", "cur=EUR", "rr=2.0"]),
+      mk(7200, "trade", "Position fermée (Take Profit) : GBPUSD 0.25 lot à 1.27480  Résultat +142.30 EUR", "Position fermée (Take Profit) : GBPUSD 0.25 lot à 1.27480  Résultat +142.30 EUR", ["sym=GBPUSD", "ev=close", "why=Take Profit", "profit=142.30"]),
+      mk(9000, "line", "EURUSD : prix monte au-dessus de 1.08400 (ligne ALERTE resistance)", "EURUSD : prix monte au-dessus de 1.08400 (ligne ALERTE resistance)", ["sym=EURUSD"]),
+      mk(14000, "account", "Position SANS stop loss : XAUUSD 0.05 lot (ticket 51234). Place un stop.", "Position SANS stop loss : XAUUSD 0.05 lot (ticket 51234). Place un stop.", ["sym=XAUUSD"]),
+      mk(20000, "summary", "RÉSUMÉ DU MARCHÉ H1", "RÉSUMÉ DU MARCHÉ H1\nEURUSD : hausse, RSI 55, ATR 14.6 pips\nGBPUSD : hausse, RSI 61, ATR 18.2 pips\nUSDJPY : baisse, RSI 44, ATR 20.9 pips\nXAUUSD : hausse, RSI 68, ATR 262.0 pips\nAnnonces fortes (24 h) : 2\n- USD Nonfarm Payrolls (dans 330 min)\n- USD Unemployment Rate (dans 330 min)"),
+      mk(30000, "info", "AlertesPro démarré : 4 marché(s), H1, risque 1.0 % par trade. Les alertes arriveront ici.", "AlertesPro démarré : 4 marché(s), H1, risque 1.0 % par trade. Les alertes arriveront ici.")
+    ];
+  }
+
+  function applyMode() {
+    if (S.demo) { S.msgs = []; addMessages(demoData(), false); }
+    else { S.msgs = store.get("msgs", []); }
+    $("swDemo").classList.toggle("on", S.demo);
+    render(); connect();
+  }
+
+  // ---------- Navigation et événements ----------
+  function go(view) {
+    S.view = view;
+    document.querySelectorAll(".view").forEach((v) => v.classList.toggle("on", v.id === "v-" + view));
+    document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("on", b.dataset.view === view));
+    const latest = Math.floor(Date.now() / 1000);
+    if (view === "signals") S.seen.signals = latest;
+    if (view === "feed") S.seen.feed = latest;
+    store.set("seen", S.seen);
+    renderBadges();
+    window.scrollTo(0, 0);
+  }
+
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.view) return go(b.dataset.view);
+    if (b.dataset.go) return go(b.dataset.go);
+    if (b.dataset.copy) return copy(b.dataset.copy);
+    if (b.dataset.sf) { S.sigFilter = b.dataset.sf; return renderSignals(); }
+    if (b.dataset.ff) { S.feedFilter = b.dataset.ff; return renderFeed(); }
+  });
+
+  $("conn").onclick = () => go("settings");
+  $("genCode").onclick = () => {
+    const a = new Uint8Array(12); crypto.getRandomValues(a);
+    const abc = "abcdefghijkmnpqrstuvwxyz23456789";
+    $("code").value = "alertespro-" + Array.from(a, (x) => abc[x % abc.length]).join("");
+    toast("Nouveau code créé. Copie-le dans le robot.");
+  };
+  $("copyCode").onclick = () => $("code").value ? copy($("code").value) : toast("Pas encore de code.");
+  $("saveCode").onclick = () => {
+    const c = $("code").value.trim();
+    if (!/^[-_A-Za-z0-9]{8,64}$/.test(c)) return toast("Code invalide : lettres, chiffres et tirets (8 à 64).");
+    if (c !== S.code) { S.msgs = []; store.set("msgs", []); }
+    S.code = c; store.set("code", c);
+    if (S.demo) { S.demo = false; store.set("demo", false); }
+    applyMode(); toast("Connecté au robot."); go("home");
+  };
+  $("testBtn").onclick = sendTest;
+  $("swDemo").onclick = () => { S.demo = !S.demo; store.set("demo", S.demo); applyMode(); toast(S.demo ? "Mode démo activé" : "Mode démo désactivé"); };
+  $("swSound").onclick = () => { S.sound = !S.sound; store.set("sound", S.sound); $("swSound").classList.toggle("on", S.sound); if (S.sound) beep(); };
+  $("swNotif").onclick = async () => {
+    if (!("Notification" in window)) return toast("Notifications non disponibles ici. Installe l'appli sur l'écran d'accueil.");
+    if (!S.notif) {
+      const p = await Notification.requestPermission();
+      if (p !== "granted") return toast("Notifications refusées dans le navigateur.");
+    }
+    S.notif = !S.notif; store.set("notif", S.notif); $("swNotif").classList.toggle("on", S.notif);
+  };
+  $("clearBtn").onclick = () => {
+    if (!confirm("Effacer l'historique des alertes sur ce téléphone ?")) return;
+    S.msgs = []; store.set("msgs", []); render(); toast("Historique effacé.");
+  };
+  ["cCap", "cRisk", "cSl", "cPip"].forEach((id) => $(id).addEventListener("input", calc));
+
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && !S.demo && S.code) { poll().catch(() => {}); if (!es) connect(); } });
+  setInterval(() => { if (!document.hidden) render(); }, 60000);
+
+  // ---------- Démarrage ----------
+  $("code").value = S.code;
+  $("swSound").classList.toggle("on", S.sound);
+  $("swNotif").classList.toggle("on", S.notif);
+  const c = store.get("calc", null);
+  if (c) ["cCap", "cRisk", "cSl", "cPip"].forEach((id, i) => { if (c[i] != null) $(id).value = c[i]; });
+  $("rules").innerHTML = RULES.map((r) => '<div class="rule">' + icon("check") + "<span>" + esc(r) + "</span></div>").join("");
+  calc();
+  if (!S.code && !store.get("visited", false)) { S.demo = true; store.set("demo", true); store.set("visited", true); }
+  applyMode();
+
+  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+})();
+</script>
+</body>
+</html>

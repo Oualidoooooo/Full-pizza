@@ -11,7 +11,7 @@
 //|  Le robot ne passe AUCUN ordre : il surveille et il prévient.    |
 //+------------------------------------------------------------------+
 #property copyright "AlertesPro"
-#property version   "1.10"
+#property version   "1.20"
 #property description "Signaux avec stop loss / take profit / lot, calendrier économique, résumé du matin."
 #property description "Ne passe aucun ordre. Teste d'abord sur un compte démo."
 
@@ -26,6 +26,9 @@ input bool   InpTelegram     = false;         // Telegram
 input string InpTgToken      = "";            // Telegram : token du bot
 input string InpTgChatId     = "";            // Telegram : chat id
 input bool   InpTestAtStart  = true;          // Envoyer un message de test au démarrage
+input bool   InpApp          = true;          // Appli AlertesPro (tableau de bord sur le téléphone)
+input string InpAppCode      = "";            // Appli : code de connexion (copie-le depuis l'appli)
+input int    InpStatusMin    = 15;            // Appli : minutes entre deux mises à jour du compte
 
 //--- Symboles surveillés
 input group "2. Marchés surveillés"
@@ -256,9 +259,122 @@ bool SendTelegram(const string text)
   }
 
 //+------------------------------------------------------------------+
+//| Appli AlertesPro (relais ntfy.sh)                                |
+//+------------------------------------------------------------------+
+string JsonEscape(string s)
+  {
+   StringReplace(s, "\\", "\\\\");
+   StringReplace(s, "\"", "\\\"");
+   StringReplace(s, "\r", "");
+   StringReplace(s, "\n", "\\n");
+   StringReplace(s, "\t", " ");
+   return s;
+  }
+
+//--- tags = "cle=valeur,cle=valeur" (données lues par l'appli)
+bool SendApp(const string kind, const string title, const string msg, const string tags, const int priority = 3)
+  {
+   if(!InpApp || InpAppCode == "" || MQLInfoInteger(MQL_TESTER))
+      return false;
+   string list[];
+   int n = StringSplit("k=" + kind + (tags == "" ? "" : "," + tags), ',', list);
+   string jt = "";
+   for(int i = 0; i < n; i++)
+     {
+      if(list[i] == "")
+         continue;
+      jt += (jt == "" ? "" : ",") + "\"" + JsonEscape(list[i]) + "\"";
+     }
+   string body = "{\"topic\":\"" + JsonEscape(InpAppCode) + "\"," +
+                 "\"title\":\"" + JsonEscape(title) + "\"," +
+                 "\"message\":\"" + JsonEscape(msg) + "\"," +
+                 "\"priority\":" + IntegerToString(priority) + "," +
+                 "\"tags\":[" + jt + "]}";
+   char post[], result[];
+   string resHeaders;
+   int len = StringToCharArray(body, post, 0, WHOLE_ARRAY, CP_UTF8);
+   if(len > 0)
+      ArrayResize(post, len - 1); // retire le zéro final
+   ResetLastError();
+   int code = WebRequest("POST", "https://ntfy.sh/", "Content-Type: application/json\r\n",
+                         5000, post, result, resHeaders);
+   if(code == -1)
+     {
+      int err = GetLastError();
+      if(err == 4014)
+         Print("Appli : ajoute https://ntfy.sh dans Outils > Options > Expert Advisors > WebRequest.");
+      else
+         Print("Appli : erreur WebRequest ", err);
+      return false;
+     }
+   if(code != 200)
+     {
+      Print("Appli : réponse ", code, " ", CharArrayToString(result));
+      return false;
+     }
+   return true;
+  }
+
+//--- état du compte et des marchés pour le tableau de bord
+void SendStatus()
+  {
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double equity  = AccountInfoDouble(ACCOUNT_EQUITY);
+   double closed  = TodayClosedProfit();
+   string tags = "bal=" + DoubleToString(balance, 2) +
+                 ",eq=" + DoubleToString(equity, 2) +
+                 ",cur=" + AccountInfoString(ACCOUNT_CURRENCY) +
+                 ",day=" + DoubleToString(closed + equity - balance, 2) +
+                 ",ml=" + DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN) > 0 ? AccountInfoDouble(ACCOUNT_MARGIN_LEVEL) : 0, 0) +
+                 ",pos=" + IntegerToString(PositionsTotal()) +
+                 ",tf=" + TfName(InpTimeframe) +
+                 ",risk=" + DoubleToString(InpRiskPct, 1);
+   for(int i = 0; i < ArraySize(g_syms); i++)
+     {
+      string sym = g_syms[i].name;
+      double trend = 0, atr = 0, rsi = 0;
+      double close = iClose(sym, InpTimeframe, 1);
+      string dir = "?";
+      if(LastValue(g_syms[i].hTrend, 1, trend) && close > 0)
+         dir = (close > trend) ? "up" : "down";
+      LastValue(g_syms[i].hRsi, 1, rsi);
+      LastValue(g_syms[i].hAtr, 1, atr);
+      string news = "";
+      bool hasNews = NewsNear(sym, 60, news);
+      tags += ",m=" + sym + "|" + dir + "|" + DoubleToString(rsi, 1) + "|" +
+              DoubleToString(PipSize(sym) > 0 ? atr / PipSize(sym) : 0, 1) + "|" +
+              Px(sym, SymbolInfoDouble(sym, SYMBOL_BID)) + "|" + (hasNews ? "1" : "0");
+     }
+   for(int i = 0; i < PositionsTotal() && i < 10; i++)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      string sym = PositionGetString(POSITION_SYMBOL);
+      tags += ",p=" + sym + "|" +
+              (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ? "buy" : "sell") + "|" +
+              DoubleToString(PositionGetDouble(POSITION_VOLUME), 2) + "|" +
+              DoubleToString(PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP), 2) + "|" +
+              (PositionGetDouble(POSITION_SL) != 0 ? "1" : "0");
+     }
+   SendApp("status", "Statut", "Mise à jour du compte", tags, 1);
+  }
+
+void CheckStatus()
+  {
+   static datetime last = 0;
+   if(!InpApp || InpAppCode == "")
+      return;
+   if(last != 0 && TimeLocal() - last < (int)MathMax(1, InpStatusMin) * 60)
+      return;
+   last = TimeLocal();
+   SendStatus();
+  }
+
+//+------------------------------------------------------------------+
 //| Envoi d'une alerte sur tous les canaux choisis                   |
 //+------------------------------------------------------------------+
-void Notify(const string msg)
+void Notify(const string msg, const string kind = "info", const string tags = "")
   {
    Print("ALERTE : ", msg);
 
@@ -278,6 +394,7 @@ void Notify(const string msg)
    int nl = StringFind(msg, "\n");
    if(nl > 0)
       first = StringSubstr(msg, 0, nl);
+   SendApp(kind, first, msg, tags, kind == "signal" || kind == "account" ? 4 : 3);
    int n = ArraySize(g_history);
    if(n >= HISTORY_SIZE)
      {
@@ -396,7 +513,7 @@ void CheckNews()
             Notify("ANNONCE FORTE " + MinutesText((long)(vals[i].time - now)) + " : " +
                    cur[c] + " - " + ev.name +
                    "\nLe marché peut bouger fort. Évite d'entrer juste avant et vérifie tes stops sur " +
-                   cur[c] + ".");
+                   cur[c] + ".", "news", "cur=" + cur[c] + ",min=" + IntegerToString((long)(vals[i].time - now) / 60));
            }
         }
      }
@@ -479,7 +596,14 @@ void SendSignal(const string sym, const bool buy, const string reason, const dou
    if(newsNear)
       msg += "\nAttention annonce : " + news;
 
-   Notify(msg);
+   int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+   string tags = "sym=" + sym + ",side=" + (buy ? "buy" : "sell") + ",tf=" + tf +
+                 ",entry=" + DoubleToString(entry, dg) + ",sl=" + DoubleToString(sl, dg) +
+                 ",tp=" + DoubleToString(tp, dg) + ",slp=" + DoubleToString(dist / PipSize(sym), 1) +
+                 ",tpp=" + DoubleToString(dist * InpRR / PipSize(sym), 1) +
+                 ",lot=" + DoubleToString(lots, VolDigits(sym)) + ",risk=" + DoubleToString(realRisk, 2) +
+                 ",cur=" + AccountInfoString(ACCOUNT_CURRENCY) + ",rr=" + DoubleToString(InpRR, 1);
+   Notify(msg, "signal", tags);
   }
 
 //+------------------------------------------------------------------+
@@ -535,17 +659,17 @@ void CheckSymbol(SymState &st)
    if(InpRsiAlerts && hasRsi)
      {
       if(rsiPrev < InpRsiHigh && rsi >= InpRsiHigh && CooldownOk(st.name + "rsiH", InpCooldownSec))
-         Notify(st.name + " " + tf + " : RSI en surachat (" + DoubleToString(rsi, 1) + ")");
+         Notify(st.name + " " + tf + " : RSI en surachat (" + DoubleToString(rsi, 1) + ")", "market", "sym=" + st.name);
       if(rsiPrev > InpRsiLow && rsi <= InpRsiLow && CooldownOk(st.name + "rsiL", InpCooldownSec))
-         Notify(st.name + " " + tf + " : RSI en survente (" + DoubleToString(rsi, 1) + ")");
+         Notify(st.name + " " + tf + " : RSI en survente (" + DoubleToString(rsi, 1) + ")", "market", "sym=" + st.name);
      }
    if(InpMaAlerts)
      {
       string mm = "MM" + IntegerToString(InpMaFast) + "/MM" + IntegerToString(InpMaSlow);
       if(crossUp && CooldownOk(st.name + "maUp", InpCooldownSec))
-         Notify(st.name + " " + tf + " : croisement haussier " + mm + " à " + Px(st.name, close));
+         Notify(st.name + " " + tf + " : croisement haussier " + mm + " à " + Px(st.name, close), "market", "sym=" + st.name);
       if(crossDn && CooldownOk(st.name + "maDn", InpCooldownSec))
-         Notify(st.name + " " + tf + " : croisement baissier " + mm + " à " + Px(st.name, close));
+         Notify(st.name + " " + tf + " : croisement baissier " + mm + " à " + Px(st.name, close), "market", "sym=" + st.name);
      }
   }
 
@@ -604,7 +728,7 @@ void SendSummary()
       else
          msg += "Annonces fortes (24 h) : " + IntegerToString(count) + "\n" + list;
      }
-   Notify(msg);
+   Notify(msg, "summary");
   }
 
 void CheckSummary()
@@ -691,7 +815,7 @@ void CheckLines()
          continue;
 
       Notify(_Symbol + " : prix " + (up ? "monte au-dessus de " : "descend sous ") +
-             Px(_Symbol, level) + " (ligne " + name + ")");
+             Px(_Symbol, level) + " (ligne " + name + ")", "line", "sym=" + _Symbol);
 
       //--- la ligne passe en gris : elle ne sonnera plus
       ObjectSetString(0, name, OBJPROP_TEXT, DONE_TAG);
@@ -745,7 +869,7 @@ void CheckAccount()
       double dd = (balance - equity) / balance * 100.0;
       if(dd >= InpMaxDrawdown && CooldownOk("dd", pause))
          Notify("Compte : perte latente de " + DoubleToString(dd, 1) + " % (" +
-                Money(equity - balance) + ")");
+                Money(equity - balance) + ")", "account");
      }
 
    if(InpDailyLossPct > 0 && balance > 0)
@@ -754,14 +878,14 @@ void CheckAccount()
       double startBalance = balance - TodayClosedProfit();
       if(startBalance > 0 && -day / startBalance * 100.0 >= InpDailyLossPct && CooldownOk("dayloss", pause * 4))
          Notify("Compte : perte du jour " + Money(day) + " (" +
-                DoubleToString(-day / startBalance * 100.0, 1) + " %). Arrête pour aujourd'hui.");
+                DoubleToString(-day / startBalance * 100.0, 1) + " %). Arrête pour aujourd'hui.", "account");
      }
 
    if(InpMinMargin > 0 && AccountInfoDouble(ACCOUNT_MARGIN) > 0)
      {
       double ml = AccountInfoDouble(ACCOUNT_MARGIN_LEVEL);
       if(ml > 0 && ml <= InpMinMargin && CooldownOk("margin", pause))
-         Notify("Compte : niveau de marge bas (" + DoubleToString(ml, 0) + " %)");
+         Notify("Compte : niveau de marge bas (" + DoubleToString(ml, 0) + " %)", "account");
      }
 
    if(InpNoStopAlert)
@@ -777,7 +901,7 @@ void CheckAccount()
          if(CooldownOk("nosl" + IntegerToString((long)ticket), pause))
             Notify("Position SANS stop loss : " + PositionGetString(POSITION_SYMBOL) + " " +
                    DoubleToString(PositionGetDouble(POSITION_VOLUME), 2) + " lot (ticket " +
-                   IntegerToString((long)ticket) + "). Place un stop.");
+                   IntegerToString((long)ticket) + "). Place un stop.", "account", "sym=" + PositionGetString(POSITION_SYMBOL));
         }
      }
   }
@@ -808,7 +932,8 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
    if(entry == DEAL_ENTRY_IN)
      {
       Notify("Position ouverte : " + (type == DEAL_TYPE_BUY ? "ACHAT " : "VENTE ") +
-             sym + " " + lots + " à " + Px(sym, price));
+             sym + " " + lots + " à " + Px(sym, price), "trade",
+             "sym=" + sym + ",side=" + (type == DEAL_TYPE_BUY ? "buy" : "sell") + ",ev=open");
       return;
      }
 
@@ -826,7 +951,8 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
       why = "robot";
 
    Notify("Position fermée (" + why + ") : " + sym + " " + lots + " à " + Px(sym, price) +
-          "  Résultat " + Money(profit));
+          "  Résultat " + Money(profit), "trade",
+          "sym=" + sym + ",ev=close,why=" + why + ",profit=" + DoubleToString(profit, 2));
   }
 
 //+------------------------------------------------------------------+
@@ -941,6 +1067,7 @@ void OnTimer()
    CheckAccount();
    CheckNews();
    CheckSummary();
+   CheckStatus();
    UpdatePanel();
   }
 

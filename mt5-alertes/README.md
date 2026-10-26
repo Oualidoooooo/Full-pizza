@@ -8,6 +8,37 @@ stop loss, take profit et taille de lot calculée selon ton risque.
 > décides. Aucune stratégie ne garantit des bénéfices. Teste d'abord sur un
 > **compte démo** (voir plus bas).
 
+## L'appli sur ton téléphone
+
+**Lien : https://oualidoooooo.github.io/Full-pizza/mt5-alertes/app/**
+(le lien marche une fois les fichiers sur la branche publiée par GitHub Pages)
+
+Elle affiche en direct :
+
+- **Accueil** : équité, résultat du jour, marge, positions ouvertes, dernier
+  signal, annonces à venir, calculatrice de lot et règles de risque.
+- **Signaux** : chaque signal avec entrée, stop, objectif (touche un prix pour
+  le copier), lot, risque, et la position du prix actuel entre le SL et le TP.
+- **Marchés** : tendance, prix, jauge RSI, volatilité et annonce proche pour
+  chaque marché, ainsi que le résumé du matin.
+- **Alertes** : tout l'historique, filtrable par type.
+
+À la première ouverture, elle démarre en **mode démo** avec des données
+d'exemple. Pour la brancher sur ton robot :
+
+1. Dans l'appli, ouvre **Réglages**, puis touche **Nouveau code** et **Copier**.
+2. Dans MT5 : **Outils > Options > Expert Advisors** → *Autoriser WebRequest*
+   → ajoute `https://ntfy.sh`.
+3. Dans les paramètres du robot, colle le code dans **Appli : code de connexion**.
+4. Dans l'appli, touche **Se connecter**.
+5. Installe-la : sur iPhone avec **Partager > Sur l'écran d'accueil**, sur
+   Android avec **⋮ > Installer l'application**.
+
+Les données passent par **ntfy.sh**, un relais de messages gratuit et sans
+inscription. Ton code sert de mot de passe : garde-le pour toi. Le relais garde
+les messages 12 h et l'appli conserve l'historique sur ton téléphone. Le
+compte et les marchés sont mis à jour toutes les 15 min (réglable).
+
 ## Les signaux de trading
 
 Un signal n'est envoyé que si **toutes** les conditions sont réunies :
