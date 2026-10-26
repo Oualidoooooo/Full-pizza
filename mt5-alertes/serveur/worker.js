@@ -19,9 +19,10 @@ const APP_URL = "https://oualidoooooo.github.io/Full-pizza/mt5-alertes/app/";
 const TZ = "Europe/Paris";
 
 const RISK_DEFAULT = 1;          // % du capital risqué par trade
-const RISK_MIN = 0.25;
-const RISK_MAX = 2;              // jamais plus : c'est ce qui évite de cramer un compte
-const DAILY_STOP_PCT = 3;        // après -3 % dans la journée : plus de signaux jusqu'à demain
+const RISK_MIN = 0.05;
+const RISK_MAX = 100;            // chacun choisit (l'appli prévient au-delà de 2 %)
+const DAILY_STOP_PCT = 3;        // stop du jour : 3 % du capital, ou 3 pertes si le risque est plus grand
+const dailyStopMoney = (u) => Math.min(u.capital, u.capital * Math.max(DAILY_STOP_PCT, 3 * u.risk_pct) / 100);
 const MAX_OPEN = 3;              // trades en cours maximum par compte
 const MARGIN_SHARE = 0.5;        // la marge d'un trade ne dépasse pas 50 % du capital
 const LEVERAGE = { fx: 30, gold: 20, index: 20, other: 10, stock: 5, crypto: 2 }; // levier max d'un particulier (ESMA)
@@ -269,7 +270,7 @@ async function registerBot(env, origin) {
     { command: "moi", description: "Mon compte et mon bilan" },
     { command: "marches", description: "Ce que je risque et peux gagner sur chaque marché" },
     { command: "capital", description: "Changer mon capital (ex. /capital 1500)" },
-    { command: "risque", description: "Risque par trade en % (0,25 à 2)" },
+    { command: "risque", description: "Risque par trade en % du capital" },
     { command: "pause", description: "Ne plus recevoir de signaux" },
     { command: "reprendre", description: "Recevoir de nouveau les signaux" },
     { command: "aide", description: "Liste des commandes" },
@@ -353,7 +354,7 @@ function planGain(a, lot, risk) {
 function publicUser(u, bot) {
   return {
     id: u.id, name: u.name, email: u.email, capital: u.capital, riskPct: u.risk_pct, admin: !!u.is_admin,
-    riskMoney: round2(u.capital * u.risk_pct / 100), dailyStop: round2(u.capital * DAILY_STOP_PCT / 100),
+    riskMoney: round2(u.capital * u.risk_pct / 100), dailyStop: round2(dailyStopMoney(u)),
     markets: u.markets === "*" ? "*" : u.markets.split(",").filter(Boolean), paused: !!u.paused,
     telegram: u.tg_chat ? { linked: true, name: u.tg_name || "" } : { linked: false },
     linkCode: u.link_code, linkUrl: bot ? "https://t.me/" + bot + "?start=" + u.link_code : "",
@@ -521,7 +522,7 @@ async function apiUpdateMe(env, u, body) {
   }
   if (body.riskPct != null) {
     const r = num(body.riskPct);
-    if (!(r >= RISK_MIN - 1e-6 && r <= RISK_MAX + 1e-6)) return fail(400, "Pour protéger ton compte, le risque va de " + fmtShort(RISK_MIN) + " % à " + RISK_MAX + " % par trade.");
+    if (!(r >= RISK_MIN - 1e-6 && r <= RISK_MAX + 1e-6)) return fail(400, "La perte par trade doit être entre " + fmtShort(RISK_MIN) + " % et 100 % de ton capital.");
     sets.push("risk_pct = ?"); vals.push(Math.round(r * 10000) / 10000);
   }
   if (body.markets != null) {
@@ -685,7 +686,7 @@ function profileMsg(u, st, cur, rr) {
     "💼 Capital : <b>" + money(u.capital, cur, false) + "</b>",
     "🛡️ Risque : " + fmtShort(u.risk_pct) + " % → max <b>" + money(riskMoney, cur, false) + "</b> de perte par trade",
     "🎯 Gain visé : environ <b>" + money(riskMoney * rr, cur, false) + "</b> par trade gagnant",
-    "🛑 Stop du jour : après " + money(u.capital * DAILY_STOP_PCT / 100, cur, false) + " de pertes",
+    "🛑 Stop du jour : après " + money(dailyStopMoney(u), cur, false) + " de pertes",
     "📈 Marchés : " + (u.markets === "*" ? "tous" : esc(u.markets.split(",").join(", "))),
     "🔔 Alertes : " + state, SEP,
     statsLine(st, cur),
@@ -711,7 +712,7 @@ const HELP = ["ℹ️ <b>Commandes</b>", SEP,
   "/moi : ton compte et ton bilan",
   "/marches : ce que tu risques et peux gagner sur chaque marché",
   "/capital 1500 : changer ton capital",
-  "/risque 1 : risque par trade en % (0,25 à 2)",
+  "/risque 1 : risque par trade en % du capital",
   "/pause : ne plus recevoir de signaux",
   "/reprendre : recevoir de nouveau les signaux",
   "/aide : cette liste"].join("\n");
@@ -750,7 +751,7 @@ async function onTelegram(env, update) {
       "💼 Capital : <b>" + money(u.capital, cur, false) + "</b>",
       "🔴 Par trade, tu risques au maximum <b>" + money(riskMoney, cur, false) + "</b>",
       "🟢 Par trade gagnant, tu vises environ <b>" + money(riskMoney * rs.rr, cur, false) + "</b>",
-      "🛑 Stop automatique après " + money(u.capital * DAILY_STOP_PCT / 100, cur, false) + " de pertes dans la journée", SEP,
+      "🛑 Stop automatique après " + money(dailyStopMoney(u), cur, false) + " de pertes dans la journée", SEP,
       "Tu recevras ici :",
       "🟡 la pré-alerte, 1 minute avant",
       "🟢🔴 le signal, calculé pour ton argent",
@@ -785,7 +786,7 @@ async function onTelegram(env, update) {
   }
   if (cmd === "/risque") {
     const r = num(args[0]);
-    if (!(r >= RISK_MIN && r <= RISK_MAX)) return reply("🛡️ Pour protéger ton compte, le risque va de " + fmtShort(RISK_MIN) + " % à " + RISK_MAX + " % par trade.\nExemple : <code>/risque 1</code>");
+    if (!(r >= RISK_MIN && r <= RISK_MAX)) return reply("Écris le risque par trade en % de ton capital.\nExemple : <code>/risque 1</code> (1 % est conseillé, plus de 2 % c'est risqué)");
     await env.DB.prepare("UPDATE users SET risk_pct = ? WHERE id = ?").bind(round2(r), user.id).run();
     user = await userById(env, user.id);
     return reply("✅ Risque mis à jour.\n\n" + profileMsg(user, await userStats(env, user.id), cur, rs.rr));
@@ -876,7 +877,7 @@ async function onResult(env, ev) {
   if (!alertId) return { dup: true };
   const cur = ev.cur || "EUR";
   const r = Number.isFinite(ev.r) ? ev.r : 0;
-  const ds = (await env.DB.prepare("SELECT d.*, u.tg_chat, u.capital, u.stopped_until, a.data AS adata FROM deliveries d JOIN users u ON u.id = d.user_id JOIN alerts a ON a.id = d.alert_id WHERE d.sid = ? AND d.kind = 'signal' AND d.result IS NULL")
+  const ds = (await env.DB.prepare("SELECT d.*, u.tg_chat, u.capital, u.risk_pct, u.stopped_until, a.data AS adata FROM deliveries d JOIN users u ON u.id = d.user_id JOIN alerts a ON a.id = d.alert_id WHERE d.sid = ? AND d.kind = 'signal' AND d.result IS NULL")
     .bind(ev.sid).all()).results || [];
   if (!ds.length) return { result: { users: 0 }, outbox: [] };
   const t = now();
@@ -901,10 +902,10 @@ async function onResult(env, ev) {
     const st = stats.get(d.user_id);
     let text = resultMsg(ev, d, st, cur);
     // stop du jour : -3 % du capital
-    if (d.lot > 0 && d.money < 0 && d.stopped_until <= t && st.today <= -(d.capital * DAILY_STOP_PCT / 100) && !stops.includes(d.user_id)) {
+    if (d.lot > 0 && d.money < 0 && d.stopped_until <= t && st.today <= -dailyStopMoney({ capital: d.capital, risk_pct: d.risk_pct }) + 0.005 && !stops.includes(d.user_id)) {
       stops.push(d.user_id);
       text += "\n\n" + ["🛑 <b>STOP POUR AUJOURD'HUI</b>", SEP,
-        "Tu as perdu " + money(-st.today, cur, false) + " aujourd'hui (" + DAILY_STOP_PCT + " % de ton capital).",
+        "Tu as perdu " + money(-st.today, cur, false) + " aujourd'hui.",
         "Plus de signaux jusqu'à demain : c'est ce qui protège ton compte.",
         "Les trades en cours continuent jusqu'à leur Stop Loss ou Take Profit."].join("\n");
     }

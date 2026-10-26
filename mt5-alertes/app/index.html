@@ -210,7 +210,7 @@ a{color:var(--accent)}
 .range{width:100%;margin:14px 0 6px;accent-color:var(--accent);height:28px}
 .ticks{display:flex;justify-content:space-between;font-size:11.5px;color:var(--dim);margin:0 2px}
 .riskbox{margin-top:12px;border-radius:14px;padding:12px 14px;font-size:14.5px;line-height:1.5}
-.riskbox b{white-space:nowrap}
+.riskbox b.red,.riskbox b.green{white-space:nowrap}
 .riskbox.ok{background:var(--buy-bg);border:1px solid rgba(31,209,151,.3)}
 .riskbox.mid{background:var(--gold-bg);border:1px solid rgba(245,185,74,.3)}
 .riskbox.high{background:var(--sell-bg);border:1px solid rgba(255,90,110,.3)}
@@ -436,7 +436,7 @@ function viewWelcome() {
     '<div class="feat"><div class="ic gold">🟡</div><div><b>1 minute avant</b><span>Une pré-alerte pour ouvrir MT5 à temps</span></div></div>' +
     '<div class="feat"><div class="ic green">🟢</div><div><b>Le signal complet</b><span>Prix d\'entrée, Stop Loss, Take Profit et volume</span></div></div>' +
     '<div class="feat"><div class="ic blue">💶</div><div><b>Ton argent, en euros</b><span>Combien tu peux perdre ou gagner sur chaque trade</span></div></div>' +
-    '<div class="feat"><div class="ic red">🛡️</div><div><b>Protégé contre les grosses pertes</b><span>2 % de risque maximum par trade, stop automatique à −3 % par jour</span></div></div>' +
+    '<div class="feat"><div class="ic red">🛡️</div><div><b>Tu choisis ce que tu risques</b><span>Ta perte max par trade en euros, et un stop automatique en cas de mauvaise journée</span></div></div>' +
     "</div>" +
     (API ? '<button class="btn" data-go="signup">Créer mon compte</button><button class="btn ghost" data-go="login">J\'ai déjà un compte</button>'
          : '<div class="warn" style="margin-bottom:12px">⚙️ Le serveur n\'est pas encore installé. En attendant, regarde l\'exemple pour voir à quoi ça ressemble.</div>') +
@@ -665,10 +665,10 @@ function tabMarkets() {
 
 function riskInfo(capital, riskPct, rr) {
   const lose = capital * riskPct / 100;
-  const cls = riskPct <= 1 ? "ok" : riskPct < 2 ? "mid" : "high";
-  const word = riskPct <= 1 ? "✅ Prudent (conseillé)" : riskPct < 2 ? "⚠️ Plus risqué" : "🔥 Maximum autorisé";
+  const cls = riskPct <= 1 ? "ok" : riskPct <= 2 ? "mid" : "high";
+  const word = riskPct <= 1 ? "✅ Prudent (conseillé)" : riskPct <= 2 ? "⚠️ Plus risqué" : riskPct <= 5 ? "🔥 Très risqué : quelques pertes de suite font très mal" : "💀 Énorme : tu peux vider ton compte très vite";
   return '<div class="riskbox ' + cls + '"><b>' + word + '</b><br>Par trade, tu risques au maximum <b class="red">' + eur(-lose) + '</b> et tu vises <b class="green">' + eur(lose * rr, true) + "</b>.<br>" +
-    '<span class="muted small">Même après 5 pertes de suite, il te resterait ' + eur0(Math.round(capital * Math.pow(1 - riskPct / 100, 5))) + ".</span></div>";
+    '<span class="muted small">Après 5 pertes de suite, il te resterait ' + eur0(Math.round(capital * Math.pow(1 - riskPct / 100, 5))) + ".</span></div>";
 }
 const parseCap = (v) => parseFloat(String(v).replace(/\s/g, "").replace(",", "."));
 
@@ -686,10 +686,9 @@ function tabAccount() {
     '<div class="row" style="align-items:flex-start">' +
     field("lose", "🔴 Je perds au max", { value: fmt(capN * risk / 100), mode: "decimal", suf: "€" }) +
     field("gain", "🟢 Je vise", { value: fmt(capN * risk / 100 * rr), mode: "decimal", suf: "€" }) + "</div>" +
-    '<p class="dim small" style="margin:-4px 2px 8px">Écris l\'un des deux : l\'autre se calcule tout seul (le gain visé = ' + rr + ' × la perte, c\'est la règle du robot).</p>' +
+    '<p class="dim small" style="margin:-4px 2px 8px">Écris le montant que tu veux : l\'autre se calcule tout seul (gain visé = ' + rr + ' × la perte). Soit <b id="riskVal">' + pct(risk) + "</b> de ton capital par trade.</p>" +
+    '<input type="hidden" id="f_risk" value="' + risk + '">' +
     '<div id="riskWarn"></div>' +
-    '<div class="field" style="margin-bottom:0"><span>Soit <b id="riskVal">' + pct(risk) + "</b> de ton capital par trade</span>" +
-    '<input class="range" id="f_risk" type="range" min="0.25" max="2" step="0.05" value="' + risk + '"><div class="ticks"><span>0,25 %</span><span>1 %</span><span>2 % (max)</span></div>' +
     '<div id="riskInfo">' + riskInfo(parseCap(cap) || u.capital, risk, rr) + "</div></div>" +
     '<div style="margin-top:14px">' + msgBox() + '</div><button class="btn" data-act="save"' + (S.busy ? " disabled" : "") + ">" + busy("Enregistrer") + "</button></div>";
   html += u.telegram.linked
@@ -697,7 +696,7 @@ function tabAccount() {
       '<div class="row" style="margin-top:12px"><button class="btn small ghost" data-act="test">📨 Message test</button><button class="btn small line" data-act="relink">Changer de Telegram</button></div></div>'
     : telegramCard(true);
   html += '<div class="card"><h3>🔔 Alertes</h3><div class="setting"><div class="txt"><b>Recevoir les signaux</b><small>' + (u.paused ? "En pause : tu reçois seulement les résultats." : "Actif") + '</small></div><label class="sw"><input type="checkbox" data-act="pause"' + (u.paused ? "" : " checked") + "><i></i></label></div>" +
-    '<p class="dim small" style="margin-top:8px">🛡️ Protections : 2 % max par trade, 3 trades en cours max, stop automatique à −3 % par jour.</p></div>';
+    '<p class="dim small" style="margin-top:8px">🛡️ Protections : 3 trades en cours max, et stop automatique pour la journée après ' + eur(u.dailyStop) + ' de pertes.</p></div>';
   if (u.admin) html += adminCard();
   html += '<div class="card"><h3>❓ Aide</h3>' +
     "<details><summary>C'est quoi le Stop Loss et le Take Profit ?</summary><p>Le <b>Stop Loss (SL)</b> est le prix où MT5 ferme ton trade tout seul si ça tourne mal : c'est ta perte maximum. Le <b>Take Profit (TP)</b> est le prix où il le ferme en gain. Mets-les <b>toujours</b> quand tu ouvres un trade.</p></details>" +
@@ -868,15 +867,11 @@ function bind() {
       const lose = cap * risk / 100;
       if (from !== "lose") { fl.value = fmt(lose); S.form.lose = fl.value; }
       if (from !== "gain") { fg.value = fmt(lose * rr); S.form.gain = fg.value; }
-      if (from !== "slider") r.value = risk;
+      r.value = risk;
       $("#riskVal").textContent = pct(risk);
       $("#riskInfo").innerHTML = riskInfo(cap, risk, rr);
       let w = "";
-      if (wanted != null && cap > 0) {
-        const p = wanted / cap * 100;
-        if (p > 2.0001) w = "🛡️ Maximum <b>" + eur(cap * 0.02) + "</b> de perte par trade avec " + eur0(cap) + " de capital (2 %). Pour risquer plus, il faut un plus gros capital.";
-        else if (p < 0.2499) w = "Minimum " + eur(cap * 0.0025) + " de perte par trade (0,25 %).";
-      }
+      if (wanted != null && cap > 0 && wanted > cap) w = "Tu ne peux pas perdre plus que ton capital (" + eur0(cap) + ").";
       $("#riskWarn").innerHTML = w ? '<div class="warn" style="margin-bottom:10px">' + w + "</div>" : "";
     };
     const fromMoney = (el, isGain) => {
@@ -884,11 +879,10 @@ function bind() {
       const cap = parseCap(c.value) || 0, v = parseCap(el.value);
       if (!(cap > 0) || !(v > 0)) return;
       const lose = isGain ? v / rr : v;
-      show(Math.min(2, Math.max(0.25, lose / cap * 100)), isGain ? "gain" : "lose", lose);
+      show(Math.min(100, Math.max(0.05, lose / cap * 100)), isGain ? "gain" : "lose", lose);
     };
     fl.addEventListener("input", () => fromMoney(fl, false));
     fg.addEventListener("input", () => fromMoney(fg, true));
-    r.addEventListener("input", () => show(+r.value, "slider"));
     c.addEventListener("input", () => show(+(S.form.risk != null ? S.form.risk : S.me.user.riskPct)));
     [fl, fg].forEach((el) => el.addEventListener("blur", () => show(+S.form.risk || S.me.user.riskPct)));
   }
