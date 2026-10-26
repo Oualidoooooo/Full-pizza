@@ -963,7 +963,7 @@ function marketOpen(ts) {
 const CLOUD = {
   hourStart: 6, hourEnd: 19,          // nouveaux signaux entre 6 h et 19 h (Paris)
   maFast: 20, maSlow: 50, trend: 200, rsiN: 14, rsiHigh: 70, rsiLow: 30,
-  atrN: 14, atrMult: 1.5, adxMin: 20, r1: 1, r2: 3, validMin: 15, expireBars: 48,
+  atrN: 14, atrMult: 1.5, adxMin: 20, r1: 1, r2: 5, validMin: 15, expireBars: 48,
   markets: [
     { sym: "EURUSD", y: "EURUSD=X", dg: 5, pip: 0.0001, cls: "fx" },
     { sym: "GBPUSD", y: "GBPUSD=X", dg: 5, pip: 0.0001, cls: "fx" },

@@ -49,7 +49,7 @@ input bool   InpSigPullback  = true;          // Signal : RSI qui rebondit dans 
 input int    InpTrendPeriod  = 200;           // Filtre de tendance : période de l'EMA
 input int    InpAtrPeriod    = 14;            // Période ATR (volatilité)
 input double InpAtrMult      = 1.5;           // Stop loss = ATR x ce nombre
-input double InpRR           = 3.0;           // TP2 (objectif final) = stop x ce nombre
+input double InpRR           = 5.0;           // TP2 (objectif final) = stop x ce nombre
 input double InpTp1R         = 1.0;           // TP1 « sûr » = stop x ce nombre (0 = un seul TP)
 input double InpRiskPct      = 1.0;           // Risque par trade en % du solde
 input double InpMaxSpreadAtr = 0.25;          // Pas de signal si spread > ATR x ce nombre
