@@ -9,7 +9,7 @@
       "database_name": "alertespro"
     }
   ],
-  // toutes les 15 minutes : prévient si le robot MT5 ne répond plus
-  "triggers": { "crons": ["*/15 * * * *"] },
+  // chaque minute : robot dans le cloud (signaux sans PC)
+  "triggers": { "crons": ["* * * * *"] },
   "observability": { "enabled": true }
 }

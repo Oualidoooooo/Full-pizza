@@ -946,6 +946,7 @@ async function onTp1(env, ev) {
 
 async function onStatus(env, ev) {
   await kvSet(env, "status", ev);
+  if (ev.ver !== "cloud") await kvSet(env, "mt5_seen", { ver: ev.ver || "" });
   const off = await kvGet(env, "robot_off");
   if (!off) return { result: { stored: true }, outbox: [] };
   await kvDel(env, "robot_off");
@@ -987,17 +988,252 @@ function marketOpen(ts) {
   return true;
 }
 
+
+// =====================================================================
+//  Robot dans le cloud : même stratégie que le robot MT5, sans PC.
+//  Tourne chaque minute. Se met en pause tout seul quand le robot MT5
+//  est allumé (c'est alors lui qui envoie les signaux).
+// =====================================================================
+const CLOUD = {
+  hourStart: 6, hourEnd: 19,          // nouveaux signaux entre 6 h et 19 h (Paris)
+  maFast: 20, maSlow: 50, trend: 200, rsiN: 14, rsiHigh: 70, rsiLow: 30,
+  atrN: 14, atrMult: 1.5, adxMin: 20, r1: 1, r2: 3, validMin: 15, expireBars: 48,
+  markets: [
+    { sym: "EURUSD", y: "EURUSD=X", dg: 5, pip: 0.0001, cls: "fx" },
+    { sym: "GBPUSD", y: "GBPUSD=X", dg: 5, pip: 0.0001, cls: "fx" },
+    { sym: "USDJPY", y: "JPY=X", dg: 3, pip: 0.01, cls: "fx" },
+    { sym: "XAUUSD", y: "GC=F", dg: 2, pip: 0.1, cls: "gold", spot: "XAU" },
+  ],
+};
+const cloudTarget = () => 0.5 * CLOUD.r1 + 0.5 * CLOUD.r2;
+
+async function yahoo(ysym, range) {
+  const r = await fetch("https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(ysym) + "?interval=1h&range=" + range,
+    { headers: { "User-Agent": "Mozilla/5.0 (AlertesPro)" }, cf: { cacheTtl: 20 } });
+  if (!r.ok) throw new Error("prix " + ysym + " : " + r.status);
+  const j = await r.json();
+  const res = j && j.chart && j.chart.result && j.chart.result[0];
+  if (!res || !res.timestamp) throw new Error("prix " + ysym + " : vide");
+  const q = res.indicators.quote[0], b = { t: [], o: [], h: [], l: [], c: [] };
+  for (let i = 0; i < res.timestamp.length; i++) {
+    if (q.close[i] == null || q.high[i] == null || q.low[i] == null) continue;
+    b.t.push(res.timestamp[i]); b.o.push(q.open[i]); b.h.push(q.high[i]); b.l.push(q.low[i]); b.c.push(q.close[i]);
+  }
+  b.price = res.meta && res.meta.regularMarketPrice || b.c[b.c.length - 1];
+  return b;
+}
+
+async function goldOffset() {
+  try {
+    const r = await fetch("https://api.gold-api.com/price/XAU", { cf: { cacheTtl: 30 } });
+    const j = await r.json();
+    return Number.isFinite(j.price) ? j.price : null;
+  } catch (e) { return null; }
+}
+
+// ---- indicateurs (tableaux du plus ancien au plus récent)
+function emaArr(v, n) {
+  const out = new Array(v.length).fill(NaN);
+  if (v.length < n) return out;
+  let e = 0;
+  for (let i = 0; i < n; i++) e += v[i];
+  e /= n; out[n - 1] = e;
+  const k = 2 / (n + 1);
+  for (let i = n; i < v.length; i++) { e = v[i] * k + e * (1 - k); out[i] = e; }
+  return out;
+}
+function wilder(v, n, start) {
+  const out = new Array(v.length).fill(NaN);
+  if (v.length < start + n) return out;
+  let a = 0;
+  for (let i = start; i < start + n; i++) a += v[i];
+  a /= n; out[start + n - 1] = a;
+  for (let i = start + n; i < v.length; i++) { a = (a * (n - 1) + v[i]) / n; out[i] = a; }
+  return out;
+}
+function rsiArr(c, n) {
+  const up = [0], dn = [0];
+  for (let i = 1; i < c.length; i++) { const d = c[i] - c[i - 1]; up.push(Math.max(d, 0)); dn.push(Math.max(-d, 0)); }
+  const au = wilder(up, n, 1), ad = wilder(dn, n, 1);
+  return au.map((u, i) => (Number.isFinite(u) ? (ad[i] === 0 ? 100 : 100 - 100 / (1 + u / ad[i])) : NaN));
+}
+function atrArr(b, n) {
+  const tr = b.c.map((c, i) => (i === 0 ? b.h[i] - b.l[i] : Math.max(b.h[i] - b.l[i], Math.abs(b.h[i] - b.c[i - 1]), Math.abs(b.l[i] - b.c[i - 1]))));
+  return wilder(tr, n, 1);
+}
+function adxArr(b, n) {
+  const pdm = [0], ndm = [0], tr = [0];
+  for (let i = 1; i < b.c.length; i++) {
+    const upm = b.h[i] - b.h[i - 1], dnm = b.l[i - 1] - b.l[i];
+    pdm.push(upm > dnm && upm > 0 ? upm : 0); ndm.push(dnm > upm && dnm > 0 ? dnm : 0);
+    tr.push(Math.max(b.h[i] - b.l[i], Math.abs(b.h[i] - b.c[i - 1]), Math.abs(b.l[i] - b.c[i - 1])));
+  }
+  const atr = wilder(tr, n, 1), sp = wilder(pdm, n, 1), sn = wilder(ndm, n, 1);
+  const dx = atr.map((a, i) => { if (!Number.isFinite(a) || a === 0) return NaN; const p = 100 * sp[i] / a, m = 100 * sn[i] / a; return p + m === 0 ? 0 : 100 * Math.abs(p - m) / (p + m); });
+  const first = dx.findIndex(Number.isFinite);
+  return first < 0 ? dx.map(() => NaN) : wilder(dx.map((x) => (Number.isFinite(x) ? x : 0)), n, first);
+}
+// bougies H4 (fermées) à partir des bougies H1
+function h4Closes(b, nowTs) {
+  const out = [];
+  let key = -1, close = 0, end = 0;
+  for (let i = 0; i < b.t.length; i++) {
+    const k = Math.floor(b.t[i] / 14400);
+    if (k !== key) { if (key >= 0 && end <= nowTs) out.push(close); key = k; end = (k + 1) * 14400; }
+    close = b.c[i];
+  }
+  if (key >= 0 && end <= nowTs) out.push(close);
+  return out;
+}
+
+function analyse(b, nowTs) {
+  return { fast: emaArr(b.c, CLOUD.maFast), slow: emaArr(b.c, CLOUD.maSlow), trend: emaArr(b.c, CLOUD.trend), rsi: rsiArr(b.c, CLOUD.rsiN), atr: atrArr(b, CLOUD.atrN), adx: adxArr(b, 14), h4: h4Closes(b, nowTs) };
+}
+
+// même logique que EvalSignal du robot MT5 ; i = index de la bougie analysée
+function evalCloud(b, A, i) {
+  if (i < 1) return null;
+  const close = b.c[i], rsi = A.rsi[i], rsiPrev = A.rsi[i - 1], atr = A.atr[i], trend = A.trend[i], adx = A.adx[i];
+  if (![close, rsi, rsiPrev, atr, trend, adx, A.fast[i], A.slow[i], A.fast[i - 1], A.slow[i - 1]].every(Number.isFinite) || atr <= 0) return null;
+  const h4e = emaArr(A.h4, CLOUD.trend), hi = A.h4.length - 1;
+  if (hi < 0 || !Number.isFinite(h4e[hi])) return null;
+  const htfUp = A.h4[hi] > h4e[hi];
+  const upTrend = close > trend && htfUp, downTrend = close < trend && !htfUp;
+  if (adx < CLOUD.adxMin) return null;
+  const crossUp = A.fast[i - 1] <= A.slow[i - 1] && A.fast[i] > A.slow[i];
+  const crossDn = A.fast[i - 1] >= A.slow[i - 1] && A.fast[i] < A.slow[i];
+  const extra = " · tendance " + (htfUp ? "haussière" : "baissière") + " confirmée en H4 · tendance forte (ADX " + Math.round(adx) + ")";
+  if (crossUp && upTrend && rsi < CLOUD.rsiHigh) return { buy: true, atr, why: "MM20 / MM50 : croisement à la hausse · prix au-dessus de l'EMA 200" + extra };
+  if (crossDn && downTrend && rsi > CLOUD.rsiLow) return { buy: false, atr, why: "MM20 / MM50 : croisement à la baisse · prix sous l'EMA 200" + extra };
+  if (upTrend && rsiPrev <= CLOUD.rsiLow && rsi > CLOUD.rsiLow) return { buy: true, atr, why: "RSI qui remonte de la survente (" + Math.round(rsi) + ") : fin du repli · prix au-dessus de l'EMA 200" + extra };
+  if (downTrend && rsiPrev >= CLOUD.rsiHigh && rsi < CLOUD.rsiHigh) return { buy: false, atr, why: "RSI qui redescend du surachat (" + Math.round(rsi) + ") : fin du rebond · prix sous l'EMA 200" + extra };
+  return null;
+}
+
+function cloudSizing(m, price, eurusd, usdjpy) {
+  let vpe = 0;
+  if (m.sym === "EURUSD" || m.sym === "GBPUSD") vpe = 100000 / eurusd;
+  else if (m.sym === "USDJPY") vpe = 100000 / (usdjpy * eurusd);
+  else if (m.sym === "XAUUSD") vpe = 100 / eurusd;
+  return { dg: m.dg, vpe, npe: price * vpe, cls: m.cls, vmin: 0.01, vstep: 0.01, vmax: 100, cur: "EUR" };
+}
+
+function inCloudHours(ts) {
+  const h = +parisParts(ts).hour;
+  return h >= CLOUD.hourStart && h < CLOUD.hourEnd;
+}
+
+async function cloudRun(env, t) {
+  const outbox = [];
+  const run = async (ev) => { const o = await onRobotEvent(env, ev); if (o && o.outbox) outbox.push(...o.outbox); };
+  const st = (await kvGet(env, "cloud")) || { value: {} };
+  const S = Object.assign({ tracks: [], last: {}, pre: {}, status: 0 }, st.value || {});
+  const minute = +parisParts(t).minute;
+  const critical = minute >= 58 || minute <= 3;
+  const needStatus = t - S.status >= 300;
+  const needFull = critical || needStatus;
+  const bars = {};
+  for (const m of CLOUD.markets) {
+    if (!needFull && !S.tracks.some((x) => x.sym === m.sym)) continue;
+    try { bars[m.sym] = await yahoo(m.y, needFull ? "60d" : "1d"); } catch (e) { console.log(String(e)); }
+  }
+  if (bars.XAUUSD) {
+    const spot = await goldOffset();
+    if (spot) {
+      const off = spot - bars.XAUUSD.price;
+      for (const k of ["o", "h", "l", "c"]) bars.XAUUSD[k] = bars.XAUUSD[k].map((v) => v + off);
+      bars.XAUUSD.price = spot;
+    }
+  }
+  const eurusd = bars.EURUSD ? bars.EURUSD.price : 1.1, usdjpy = bars.USDJPY ? bars.USDJPY.price : 150;
+
+  // ---- suivi des trades en cours : TP1, TP2, stop, expiration
+  for (const tr of S.tracks.slice()) {
+    const b = bars[tr.sym];
+    if (!b) continue;
+    const m = CLOUD.markets.find((x) => x.sym === tr.sym);
+    // hauts et bas des bougies commencées depuis le signal
+    let hi = b.price, lo = b.price;
+    for (let i = 0; i < b.t.length; i++) if (b.t[i] >= tr.opened) { hi = Math.max(hi, b.h[i]); lo = Math.min(lo, b.l[i]); }
+    const risk = Math.abs(tr.entry - tr.sl);
+    const close = async (res, exit) => {
+      const rx = (tr.buy ? exit - tr.entry : tr.entry - exit) / risk;
+      const r = tr.tp1Hit ? 0.5 * CLOUD.r1 + 0.5 * rx : rx;
+      await run({ type: "result", eid: "r:" + tr.sid, sid: tr.sid, sym: tr.sym, side: tr.buy ? "buy" : "sell", res, r, rx, t1: tr.tp1Hit ? 1 : 0, r1: CLOUD.r1, entry: tr.entry, exit, dg: m.dg, cur: "EUR" });
+      S.tracks = S.tracks.filter((x) => x.sid !== tr.sid);
+    };
+    const stop = tr.tp1Hit ? tr.entry : tr.sl;
+    if (tr.buy ? lo <= stop : hi >= stop) { await close(tr.tp1Hit ? "be" : "sl", stop); continue; }
+    if (!tr.tp1Hit && (tr.buy ? hi >= tr.tp1 : lo <= tr.tp1)) {
+      tr.tp1Hit = true;
+      await run({ type: "tp1", eid: "t:" + tr.sid, sid: tr.sid, sym: tr.sym, side: tr.buy ? "buy" : "sell", entry: tr.entry, tp1: tr.tp1, r1: CLOUD.r1, dg: m.dg, cur: "EUR" });
+    }
+    if (tr.buy ? hi >= tr.tp : lo <= tr.tp) { await close("tp", tr.tp); continue; }
+    if (t - tr.opened >= CLOUD.expireBars * 3600) await close("exp", b.price);
+  }
+
+  // ---- pré-alertes et signaux
+  const statusMarkets = [];
+  for (const m of CLOUD.markets) {
+    const b = bars[m.sym];
+    if (!b || !needFull || b.c.length < 260) continue;
+    const A = analyse(b, t);
+    const n = b.c.length, lastT = b.t[n - 1];
+    const forming = lastT + 3600 > t;              // la dernière bougie n'est pas finie
+    const closedIdx = forming ? n - 2 : n - 1;
+    const closedT = b.t[closedIdx];
+    const open = S.tracks.some((x) => x.sym === m.sym);
+    const sz = cloudSizing(m, b.price, eurusd, usdjpy);
+    if (needStatus) {
+      const i = closedIdx, c = b.c[i];
+      const dir = Number.isFinite(A.trend[i]) ? (c > A.trend[i] ? "up" : "down") : "flat";
+      statusMarkets.push({ sym: m.sym, dir, rsi: A.rsi[i], px: b.price, sld: A.atr[i] * CLOUD.atrMult, slp: A.atr[i] * CLOUD.atrMult / m.pip, news: "", ...sz });
+    }
+    // pré-alerte : dans la dernière minute de la bougie en cours
+    const left = forming ? lastT + 3600 - t : 0;
+    if (forming && left <= 75 && left >= 5 && !open && S.pre[m.sym] !== lastT && inCloudHours(t + left)) {
+      const sig = evalCloud(b, A, n - 1);
+      if (sig) {
+        S.pre[m.sym] = lastT;
+        await run({ type: "pre", eid: "p:" + m.sym + ":" + lastT, sym: m.sym, side: sig.buy ? "buy" : "sell", tf: "H1", at: lastT + 3600, px: b.price, sld: sig.atr * CLOUD.atrMult, rr: cloudTarget(), ...sz });
+      }
+    }
+    // signal : sur la bougie qui vient de se fermer (dans les 4 minutes)
+    if (closedT + 3600 <= t && t - (closedT + 3600) <= 240 && S.last[m.sym] !== closedT) {
+      S.last[m.sym] = closedT;
+      const sig = !open && inCloudHours(closedT + 3600) ? evalCloud(b, A, closedIdx) : null;
+      if (sig) {
+        const buy = sig.buy, entry = b.price, dist = sig.atr * CLOUD.atrMult, k = buy ? 1 : -1;
+        const sid = m.sym + "-" + (closedT + 3600);
+        const ev = { type: "signal", eid: "s:" + sid, sid, sym: m.sym, side: buy ? "buy" : "sell", tf: "H1",
+          entry: +entry.toFixed(m.dg), sl: +(entry - k * dist).toFixed(m.dg), tp1: +(entry + k * dist * CLOUD.r1).toFixed(m.dg), tp: +(entry + k * dist * CLOUD.r2).toFixed(m.dg),
+          r1: CLOUD.r1, r2: CLOUD.r2, rr: cloudTarget(), lim: +(entry + k * dist * 0.2).toFixed(m.dg), vu: t + CLOUD.validMin * 60,
+          slp: dist / m.pip, tpp: dist * CLOUD.r2 / m.pip, rs: sig.why, ...sz };
+        await run(ev);
+        S.tracks.push({ sid, sym: m.sym, buy, entry: ev.entry, sl: ev.sl, tp1: ev.tp1, tp: ev.tp, tp1Hit: false, opened: t });
+      } else if (S.pre[m.sym] === closedT) {
+        await run({ type: "cancel", eid: "c:" + m.sym + ":" + closedT, sym: m.sym });
+      }
+    }
+  }
+  if (needStatus && statusMarkets.length) {
+    S.status = t;
+    await kvSet(env, "status", { type: "status", ver: "cloud", tf: "H1", rr: cloudTarget(), cur: "EUR", open: S.tracks.length, markets: statusMarkets });
+  }
+  await kvSet(env, "cloud", S);
+  await sendAll(env, outbox);
+}
+
 async function cron(env) {
   await ensureSchema(env);
   env = await withToken(env);
   const t = now();
-  await env.DB.prepare("DELETE FROM sessions WHERE expires < ?").bind(t).run();
-  const rs = await robotStatus(env);
-  if (!rs.updated || t - rs.updated < ROBOT_ALERT_SEC || !marketOpen(t)) return;
-  if (await kvGet(env, "robot_off")) return;
-  await kvSet(env, "robot_off", { since: rs.updated });
-  const admins = (await env.DB.prepare("SELECT tg_chat FROM users WHERE is_admin = 1 AND tg_chat IS NOT NULL").all()).results || [];
-  await sendAll(env, admins.map((a) => [a.tg_chat, "⚠️ <b>Le robot ne répond plus</b> depuis " + hhmm(rs.updated) + ".\nMT5 est peut-être fermé, ou l'ordinateur en veille.\n👉 Rouvre MT5 pour que tout le monde continue de recevoir les alertes."]));
+  if (+parisParts(t).minute % 30 === 0) await env.DB.prepare("DELETE FROM sessions WHERE expires < ?").bind(t).run();
+  // le robot MT5 est allumé ? Alors c'est lui qui envoie les signaux.
+  const mt5 = await kvGet(env, "mt5_seen");
+  if (mt5 && t - mt5.updated < ROBOT_ONLINE_SEC) return;
+  if (!marketOpen(t)) return;
+  await cloudRun(env, t);
 }
 
 // =====================================================================
