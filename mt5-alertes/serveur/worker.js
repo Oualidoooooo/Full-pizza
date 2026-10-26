@@ -504,8 +504,8 @@ async function apiUpdateMe(env, u, body) {
   }
   if (body.riskPct != null) {
     const r = num(body.riskPct);
-    if (!(r >= RISK_MIN && r <= RISK_MAX)) return fail(400, "Pour protéger ton compte, le risque va de " + fmtShort(RISK_MIN) + " % à " + RISK_MAX + " % par trade.");
-    sets.push("risk_pct = ?"); vals.push(round2(r));
+    if (!(r >= RISK_MIN - 1e-6 && r <= RISK_MAX + 1e-6)) return fail(400, "Pour protéger ton compte, le risque va de " + fmtShort(RISK_MIN) + " % à " + RISK_MAX + " % par trade.");
+    sets.push("risk_pct = ?"); vals.push(Math.round(r * 10000) / 10000);
   }
   if (body.markets != null) {
     const list = body.markets === "*" ? "*" : (Array.isArray(body.markets) ? body.markets : []).map((s) => String(s).replace(/[^A-Za-z0-9._#-]/g, "").slice(0, 20)).filter(Boolean).slice(0, 50).join(",");
