@@ -14,7 +14,7 @@
 //|  Le robot ne passe AUCUN ordre : il surveille et il prévient.    |
 //+------------------------------------------------------------------+
 #property copyright "AlertesPro"
-#property version   "2.00"
+#property version   "2.10"
 #property description "Signaux avec stop loss / take profit / lot, suivi des résultats, calendrier économique, résumé du matin."
 #property description "Ne passe aucun ordre. Teste d'abord sur un compte démo."
 
@@ -49,7 +49,8 @@ input bool   InpSigPullback  = true;          // Signal : RSI qui rebondit dans 
 input int    InpTrendPeriod  = 200;           // Filtre de tendance : période de l'EMA
 input int    InpAtrPeriod    = 14;            // Période ATR (volatilité)
 input double InpAtrMult      = 1.5;           // Stop loss = ATR x ce nombre
-input double InpRR           = 2.0;           // Take profit = stop x ce nombre (ratio gain/risque)
+input double InpRR           = 3.0;           // TP2 (objectif final) = stop x ce nombre
+input double InpTp1R         = 1.0;           // TP1 « sûr » = stop x ce nombre (0 = un seul TP)
 input double InpRiskPct      = 1.0;           // Risque par trade en % du solde
 input double InpMaxSpreadAtr = 0.25;          // Pas de signal si spread > ATR x ce nombre
 input bool   InpHtfFilter    = true;          // Confirmer la tendance sur une unité de temps supérieure
@@ -138,6 +139,8 @@ struct Track
    double            tp;
    datetime          opened;
    double            risk;     // argent risqué (lot conseillé), 0 si inconnu
+   double            tp1;      // TP1 « sûr », 0 si un seul TP
+   bool              tp1Hit;   // TP1 touché : la 2e moitié est à risque zéro
   };
 
 SymState g_syms[];
@@ -737,15 +740,16 @@ string SizingJson(const string sym)
   }
 
 void ServerSignal(const string sid, const string sym, const bool buy, const double entry, const double sl, const double tp,
-                  const double limit, const double dist, const int validMin, const string why, const string news)
+                  const double tp1, const double limit, const double dist, const int validMin, const string why, const string news)
   {
    int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
    double pip = PipSize(sym);
    string body = "{" + JS("type", "signal") + "," + JS("eid", "s:" + sid) + "," + JS("sid", sid) + "," +
                  JS("sym", sym) + "," + JS("side", buy ? "buy" : "sell") + "," + JS("tf", TfName(InpTimeframe)) + "," +
-                 JN("entry", entry, dg) + "," + JN("sl", sl, dg) + "," + JN("tp", tp, dg) + "," + JN("lim", limit, dg) + "," +
+                 JN("entry", entry, dg) + "," + JN("sl", sl, dg) + "," + JN("tp", tp, dg) + "," + (tp1 > 0 ? JN("tp1", tp1, dg) + "," + JN("r1", InpTp1R, 2) + "," + JN("r2", InpRR, 2) + "," : "") +
+                 JN("lim", limit, dg) + "," +
                  JN("slp", pip > 0 ? dist / pip : 0, 1) + "," + JN("tpp", pip > 0 ? dist * InpRR / pip : 0, 1) + "," +
-                 JN("rr", InpRR, 2) + "," + JI("vu", (long)(TimeGMT() + validMin * 60)) + "," +
+                 JN("rr", TargetR(), 2) + "," + JI("vu", (long)(TimeGMT() + validMin * 60)) + "," +
                  JS("rs", why) + "," + JS("news", news) + "," + SizingJson(sym) + "}";
    ServerSend(body);
   }
@@ -757,8 +761,16 @@ void ServerPre(const string sym, const bool buy, const int left, const double at
    string body = "{" + JS("type", "pre") + "," + JS("eid", "p:" + sym + ":" + IntegerToString((long)bar)) + "," +
                  JS("sym", sym) + "," + JS("side", buy ? "buy" : "sell") + "," + JS("tf", TfName(InpTimeframe)) + "," +
                  JI("at", (long)(TimeGMT() + left)) + "," + JN("px", px, dg) + "," + JN("sld", atr * InpAtrMult, dg) + "," +
-                 JN("rr", InpRR, 2) + "," + SizingJson(sym) + "}";
+                 JN("rr", TargetR(), 2) + "," + SizingJson(sym) + "}";
    ServerSend(body);
+  }
+
+void ServerTp1(const Track &t)
+  {
+   int dg = (int)SymbolInfoInteger(t.sym, SYMBOL_DIGITS);
+   ServerSend("{" + JS("type", "tp1") + "," + JS("eid", "t:" + t.sid) + "," + JS("sid", t.sid) + "," + JS("sym", t.sym) + "," +
+              JS("side", t.buy ? "buy" : "sell") + "," + JN("entry", t.entry, dg) + "," + JN("tp1", t.tp1, dg) + "," +
+              JN("r1", InpTp1R, 2) + "," + JI("dg", dg) + "," + JS("cur", MoneyCur()) + "}");
   }
 
 void ServerCancel(const string sym, const datetime bar)
@@ -766,11 +778,12 @@ void ServerCancel(const string sym, const datetime bar)
    ServerSend("{" + JS("type", "cancel") + "," + JS("eid", "c:" + sym + ":" + IntegerToString((long)bar)) + "," + JS("sym", sym) + "}");
   }
 
-void ServerResult(const Track &t, const string res, const double r, const double exitPx)
+void ServerResult(const Track &t, const string res, const double r, const double exitPx, const double rx)
   {
    int dg = (int)SymbolInfoInteger(t.sym, SYMBOL_DIGITS);
    ServerSend("{" + JS("type", "result") + "," + JS("eid", "r:" + t.sid) + "," + JS("sid", t.sid) + "," + JS("sym", t.sym) + "," +
-              JS("side", t.buy ? "buy" : "sell") + "," + JS("res", res) + "," + JN("r", r, 4) + "," +
+              JS("side", t.buy ? "buy" : "sell") + "," + JS("res", res) + "," + JN("r", r, 4) + "," + JN("rx", rx, 4) + "," +
+              JI("t1", t.tp1Hit ? 1 : 0) + "," + JN("r1", InpTp1R, 2) + "," +
               JN("entry", t.entry, dg) + "," + JN("exit", exitPx, dg) + "," + JI("dg", dg) + "," + JS("cur", MoneyCur()) + "}");
   }
 
@@ -824,8 +837,8 @@ void ServerStatus()
             JN("px", SymbolInfoDouble(sym, SYMBOL_BID), dg) + "," + JN("sld", atr * InpAtrMult, dg) + "," +
             JN("slp", pip > 0 ? atr * InpAtrMult / pip : 0, 1) + "," + JS("news", news) + "," + SizingJson(sym) + "}";
      }
-   string body = "{" + JS("type", "status") + "," + JS("ver", "2.00") + "," + JS("tf", TfName(InpTimeframe)) + "," +
-                 JN("rr", InpRR, 2) + "," + JS("cur", MoneyCur()) + "," + JI("open", ArraySize(g_tracks)) + "," +
+   string body = "{" + JS("type", "status") + "," + JS("ver", "2.10") + "," + JS("tf", TfName(InpTimeframe)) + "," +
+                 JN("rr", TargetR(), 2) + "," + JS("cur", MoneyCur()) + "," + JI("open", ArraySize(g_tracks)) + "," +
                  "\"markets\":[" + mk + "]}";
    ServerPost(body);
   }
@@ -1063,7 +1076,8 @@ void SaveJournal()
                       (g_tracks[i].buy ? "buy" : "sell") + ";" +
                       DoubleToString(g_tracks[i].entry, dg) + ";" + DoubleToString(g_tracks[i].sl, dg) + ";" +
                       DoubleToString(g_tracks[i].tp, dg) + ";" + IntegerToString((long)g_tracks[i].opened) + ";" +
-                      DoubleToString(g_tracks[i].risk, 2) + "\r\n");
+                      DoubleToString(g_tracks[i].risk, 2) + ";" + DoubleToString(g_tracks[i].tp1, dg) + ";" +
+                      (g_tracks[i].tp1Hit ? "1" : "0") + "\r\n");
      }
    FileClose(h);
   }
@@ -1101,12 +1115,20 @@ void LoadJournal()
          g_tracks[k].tp     = StringToDouble(f[6]);
          g_tracks[k].opened = (datetime)StringToInteger(f[7]);
          g_tracks[k].risk   = (n >= 9) ? StringToDouble(f[8]) : 0.0;
+         g_tracks[k].tp1    = (n >= 10) ? StringToDouble(f[9]) : 0.0;
+         g_tracks[k].tp1Hit = (n >= 11 && StringToInteger(f[10]) == 1);
         }
      }
    FileClose(h);
   }
 
-void AddTrack(const string sid, const string sym, const bool buy, const double entry, const double sl, const double tp, const double risk)
+//--- objectif total en R avec la méthode TP1 + TP2 (moitié / moitié)
+double TargetR()
+  {
+   return (InpTp1R > 0 && InpTp1R < InpRR) ? 0.5 * InpTp1R + 0.5 * InpRR : InpRR;
+  }
+
+void AddTrack(const string sid, const string sym, const bool buy, const double entry, const double sl, const double tp, const double risk, const double tp1)
   {
    if(!InpTrack)
       return;
@@ -1120,6 +1142,8 @@ void AddTrack(const string sid, const string sym, const bool buy, const double e
    g_tracks[k].tp     = tp;
    g_tracks[k].opened = TimeCurrent();
    g_tracks[k].risk   = risk;
+   g_tracks[k].tp1    = tp1;
+   g_tracks[k].tp1Hit = false;
    SaveJournal();
   }
 
@@ -1128,9 +1152,12 @@ void CloseTrack(const int idx, const string res, const double exitPx)
   {
    Track t = g_tracks[idx];
    double risk = MathAbs(t.entry - t.sl);
-   double r = 0;
+   double rx = 0; // résultat de la 2e moitié (ou du trade entier)
    if(risk > 0)
-      r = (t.buy ? exitPx - t.entry : t.entry - exitPx) / risk;
+      rx = (t.buy ? exitPx - t.entry : t.entry - exitPx) / risk;
+   double r = rx;
+   if(t.tp1Hit)
+      r = 0.5 * InpTp1R + 0.5 * rx; // la 1re moitié est sortie à TP1
    g_statN++;
    g_statR += r;
    if(r > 0)
@@ -1147,7 +1174,7 @@ void CloseTrack(const int idx, const string res, const double exitPx)
    ArrayResize(g_tracks, n - 1);
    SaveJournal();
 
-   string head = (res == "tp") ? "✅ TAKE PROFIT : " : (res == "sl") ? "❌ STOP LOSS : " : "⌛ EXPIRÉ : ";
+   string head = (res == "tp") ? "✅ TP2 TOUCHÉ : " : (res == "sl") ? "❌ STOP LOSS : " : (res == "be") ? "🟡 RETOUR AU PRIX D'ENTRÉE : " : "⌛ EXPIRÉ : ";
    string side = t.buy ? "ACHAT" : "VENTE";
    string msg = head + t.sym + "\n" + SEP + "\n";
    msg += " • " + side + " à " + Px(t.sym, t.entry) + "\n";
@@ -1158,34 +1185,55 @@ void CloseTrack(const int idx, const string res, const double exitPx)
    msg += "\n" + SEP + "\n📊 " + StatsText();
    string tags = "sid=" + t.sid + ",sym=" + t.sym + ",side=" + (t.buy ? "buy" : "sell") + ",res=" + res +
                  ",r=" + DoubleToString(r, 2) + ",exit=" + Px(t.sym, exitPx) + "," + StatsTag();
-   ServerResult(t, res, r, exitPx);
+   ServerResult(t, res, r, exitPx, rx);
    if(InpResultAlerts)
       Notify(msg, "result", tags);
    else
       Print(msg);
   }
 
-//--- un signal a-t-il touché son SL ou son TP pendant que MT5 était fermé ?
-bool ResolveFromHistory(const Track &t, string &res, double &exitPx)
+//--- TP1 touché : la 1re moitié sort, le stop de la 2e passe au prix d'entrée
+void HitTp1(const int idx)
+  {
+   g_tracks[idx].tp1Hit = true;
+   SaveJournal();
+   Track t = g_tracks[idx];
+   ServerTp1(t);
+   string msg = "🎯 TP1 TOUCHÉ : " + t.sym + "\n" + SEP + "\n";
+   msg += " • La 1re moitié sort à " + Px(t.sym, t.tp1) + " (+" + DoubleToString(InpTp1R, 1) + " R)\n";
+   msg += " • Mets le Stop Loss de la 2e moitié à " + Px(t.sym, t.entry) + " (prix d'entrée)\n";
+   msg += " • Plus aucun risque : elle vise TP2 à " + Px(t.sym, t.tp) + "\n" + SEP;
+   if(InpResultAlerts)
+      Notify(msg, "result", "sid=" + t.sid + ",sym=" + t.sym + ",ev=tp1");
+  }
+
+//--- stop effectif : prix d'entrée une fois TP1 touché
+double TrackStop(const Track &t)
+  {
+   return t.tp1Hit ? t.entry : t.sl;
+  }
+
+//--- un signal a-t-il touché TP1, TP2 ou son stop pendant que MT5 était fermé ?
+bool ResolveFromHistory(const int idx, string &res, double &exitPx)
   {
    MqlRates rates[];
-   int n = CopyRates(t.sym, PERIOD_M1, t.opened, TimeCurrent(), rates);
+   int n = CopyRates(g_tracks[idx].sym, PERIOD_M1, g_tracks[idx].opened, TimeCurrent(), rates);
    if(n <= 0)
       return false;
-   double point = SymbolInfoDouble(t.sym, SYMBOL_POINT);
+   double point = SymbolInfoDouble(g_tracks[idx].sym, SYMBOL_POINT);
    for(int i = 0; i < n; i++)
      {
-      double spread = rates[i].spread * point;
-      if(t.buy)
-        {
-         if(rates[i].low <= t.sl)  { res = "sl"; exitPx = t.sl; return true; }
-         if(rates[i].high >= t.tp) { res = "tp"; exitPx = t.tp; return true; }
-        }
-      else
-        {
-         if(rates[i].high + spread >= t.sl) { res = "sl"; exitPx = t.sl; return true; }
-         if(rates[i].low + spread <= t.tp)  { res = "tp"; exitPx = t.tp; return true; }
-        }
+      Track t = g_tracks[idx];
+      double spread = t.buy ? 0 : rates[i].spread * point; // une vente se ferme au prix ask
+      double hi = rates[i].high + spread, lo = rates[i].low + spread;
+      double stop = TrackStop(t);
+      bool stopHit = t.buy ? lo <= stop : hi >= stop;
+      bool tpHit   = t.buy ? hi >= t.tp : lo <= t.tp;
+      bool tp1Hit  = !t.tp1Hit && t.tp1 > 0 && (t.buy ? hi >= t.tp1 : lo <= t.tp1);
+      if(stopHit) { res = t.tp1Hit ? "be" : "sl"; exitPx = stop; return true; }
+      if(tp1Hit)
+         HitTp1(idx);
+      if(tpHit)   { res = "tp"; exitPx = t.tp; return true; }
      }
    return false;
   }
@@ -1205,14 +1253,14 @@ void CheckTracks()
       if(bid <= 0 || ask <= 0)
          continue;
       bool buy = g_tracks[i].buy;
-      double sl = g_tracks[i].sl, tp = g_tracks[i].tp;
-      if(buy && bid <= sl)
-         CloseTrack(i, "sl", sl);
-      else if(buy && bid >= tp)
-         CloseTrack(i, "tp", tp);
-      else if(!buy && ask >= sl)
-         CloseTrack(i, "sl", sl);
-      else if(!buy && ask <= tp)
+      double px = buy ? bid : ask; // prix auquel la position se fermerait
+      double tp = g_tracks[i].tp, tp1 = g_tracks[i].tp1;
+      if(!g_tracks[i].tp1Hit && tp1 > 0 && (buy ? px >= tp1 : px <= tp1))
+         HitTp1(i);
+      double stop = TrackStop(g_tracks[i]);
+      if(buy ? px <= stop : px >= stop)
+         CloseTrack(i, g_tracks[i].tp1Hit ? "be" : "sl", stop);
+      else if(buy ? px >= tp : px <= tp)
          CloseTrack(i, "tp", tp);
       else if(TimeCurrent() - g_tracks[i].opened >= life)
          CloseTrack(i, "exp", buy ? bid : ask);
@@ -1228,7 +1276,7 @@ void CatchUpTracks()
       double exitPx;
       if(!SymbolSelect(g_tracks[i].sym, true))
          continue;
-      if(ResolveFromHistory(g_tracks[i], res, exitPx))
+      if(ResolveFromHistory(i, res, exitPx))
          CloseTrack(i, res, exitPx);
      }
   }
@@ -1291,6 +1339,8 @@ bool SendSignal(const string sym, const bool buy, const string reason, const dou
    double sl    = NormalizeDouble(buy ? entry - dist : entry + dist, dg);
    double tp    = NormalizeDouble(buy ? entry + dist * InpRR : entry - dist * InpRR, dg);
    double limit = NormalizeDouble(buy ? entry + dist * 0.2 : entry - dist * 0.2, dg);
+   bool   two   = (InpTp1R > 0 && InpTp1R < InpRR);
+   double tp1   = two ? NormalizeDouble(buy ? entry + dist * InpTp1R : entry - dist * InpTp1R, dg) : 0.0;
 
    double balance   = AccountInfoDouble(ACCOUNT_BALANCE);
    double riskMoney = balance * InpRiskPct / 100.0;
@@ -1307,11 +1357,13 @@ bool SendSignal(const string sym, const bool buy, const string reason, const dou
    string msg = (buy ? "🟢 ACHAT " : "🔴 VENTE ") + sym + " (" + tf + ")\n" + SEP + "\n";
    msg += " • Entrée : " + Px(sym, entry) + "\n";
    msg += " • Stop Loss : " + Px(sym, sl) + " (" + Pips(sym, dist) + ")\n";
-   msg += " • Take Profit : " + Px(sym, tp) + " (" + Pips(sym, dist * InpRR) + ")\n";
+   if(two)
+      msg += " • TP1 (sûr) : " + Px(sym, tp1) + " (" + Pips(sym, dist * InpTp1R) + ")\n";
+   msg += " • " + (two ? "TP2" : "Take Profit") + " : " + Px(sym, tp) + " (" + Pips(sym, dist * InpRR) + ")\n";
    if(lots > 0)
      {
       msg += " • Volume : " + lotTxt + " lot\n";
-      msg += " • Si SL : -" + DoubleToString(realRisk, 2) + " " + cur + " | Si TP : +" + DoubleToString(realRisk * InpRR, 2) + " " + cur + "\n";
+      msg += " • Si SL : -" + DoubleToString(realRisk, 2) + " " + cur + " | Si TP" + (two ? "1 + TP2" : "") + " : +" + DoubleToString(realRisk * TargetR(), 2) + " " + cur + "\n";
      }
    else
       msg += " • Volume : ⛔ lot minimum trop gros pour ton compte, passe ton tour\n";
@@ -1336,8 +1388,8 @@ bool SendSignal(const string sym, const bool buy, const string reason, const dou
                  ",cur=" + cur + ",rr=" + DoubleToString(InpRR, 1) +
                  ",vu=" + IntegerToString((long)(TimeGMT() + validMin * 60)) + ",rs=" + rs;
    Notify(msg, "signal", tags);
-   ServerSignal(sid, sym, buy, entry, sl, tp, limit, dist, validMin, why, newsNear ? news : "");
-   AddTrack(sid, sym, buy, entry, sl, tp, lots > 0 ? realRisk : 0.0);
+   ServerSignal(sid, sym, buy, entry, sl, tp, tp1, limit, dist, validMin, why, newsNear ? news : "");
+   AddTrack(sid, sym, buy, entry, sl, tp, lots > 0 ? realRisk : 0.0, tp1);
    return true;
   }
 

@@ -330,6 +330,23 @@ function sizeTrade(user, m) {
   return { ok: true, lot, lotTxt: lot.toFixed(dec), risk, gain: risk * rr, riskMoney, marginCapped, margin: lot * marginPerLot, rr };
 }
 
+// TP1 + TP2 : le volume est coupé en 2 ordres (le 1er sort à TP1, le 2e vise TP2)
+function splitLots(lot, a) {
+  const step = a.vstep > 0 ? a.vstep : 0.01, vmin = a.vmin > 0 ? a.vmin : step, dec = stepDecimals(step);
+  const half = +(Math.floor(lot / 2 / step + 1e-9) * step).toFixed(dec);
+  const rest = +(lot - half).toFixed(dec);
+  if (half < vmin - 1e-9 || rest < vmin - 1e-9) return null;
+  return { half, rest, halfTxt: half.toFixed(dec), restTxt: rest.toFixed(dec), f1: half / lot };
+}
+const hasTp1 = (a) => Number.isFinite(a.tp1) && a.tp1 > 0 && Number.isFinite(a.r1) && a.r1 > 0;
+const r2Of = (a) => (Number.isFinite(a.r2) && a.r2 > 0 ? a.r2 : Math.abs(a.tp - a.entry) / Math.abs(a.entry - a.sl));
+// gain si tout va bien, pour un volume donné
+function planGain(a, lot, risk) {
+  if (!hasTp1(a)) return risk * (a.rr > 0 ? a.rr : 2);
+  const sp = splitLots(lot, a);
+  return sp ? risk * (sp.f1 * a.r1 + (1 - sp.f1) * r2Of(a)) : risk * a.r1;
+}
+
 // =====================================================================
 //  Comptes
 // =====================================================================
@@ -592,9 +609,20 @@ function signalMsg(a, s, u, cur) {
     SEP,
     "💶 Entrée : <code>" + px(a.entry, dg) + "</code>",
     "🛑 Stop Loss : <code>" + px(a.sl, dg) + "</code>" + (Number.isFinite(a.slp) ? " (" + fmt(a.slp, 1) + " pips)" : ""),
-    "🎯 Take Profit : <code>" + px(a.tp, dg) + "</code>" + (Number.isFinite(a.tpp) ? " (" + fmt(a.tpp, 1) + " pips)" : ""),
   ];
-  if (s.ok) {
+  const two = hasTp1(a);
+  const pip1 = Number.isFinite(a.slp) ? " (" + fmt(a.slp * a.r1, 1) + " pips)" : "";
+  if (two) L.push("🎯 TP1 (sûr) : <code>" + px(a.tp1, dg) + "</code>" + pip1, "🚀 TP2 : <code>" + px(a.tp, dg) + "</code>" + (Number.isFinite(a.tpp) ? " (" + fmt(a.tpp, 1) + " pips)" : ""));
+  else L.push("🎯 Take Profit : <code>" + px(a.tp, dg) + "</code>" + (Number.isFinite(a.tpp) ? " (" + fmt(a.tpp, 1) + " pips)" : ""));
+  const sp = s.ok && two ? splitLots(s.lot, a) : null;
+  if (s.ok && two) {
+    L.push("📦 Volume total : <code>" + s.lotTxt + "</code> lot", SEP,
+      "🔴 Si Stop Loss : <b>" + money(-s.risk, cur) + "</b> (" + fmtShort(s.risk / u.capital * 100) + " % de ton capital)");
+    if (sp) L.push("🟡 Si TP1 puis retour : <b>" + money(s.risk * sp.f1 * a.r1, cur) + "</b> (tu restes gagnant)",
+      "🟢 Si TP1 + TP2 : <b>" + money(s.risk * (sp.f1 * a.r1 + (1 - sp.f1) * r2Of(a)), cur) + "</b>");
+    else L.push("🟢 Si TP1 : <b>" + money(s.risk * a.r1, cur) + "</b>", "ℹ️ Volume trop petit pour couper en deux : vise seulement TP1 (le plus sûr).");
+    if (s.marginCapped) L.push("🛡️ Volume réduit pour ne pas bloquer trop de marge");
+  } else if (s.ok) {
     L.push("📦 Volume : <code>" + s.lotTxt + "</code> lot", SEP,
       "🔴 Si Stop Loss : <b>" + money(-s.risk, cur) + "</b> (" + fmtShort(s.risk / u.capital * 100) + " % de ton capital)",
       "🟢 Si Take Profit : <b>" + money(s.gain, cur) + "</b>");
@@ -608,7 +636,13 @@ function signalMsg(a, s, u, cur) {
   }
   L.push(SEP, "⏱ À prendre avant <b>" + hhmm(a.vu) + "</b>");
   if (Number.isFinite(a.lim)) L.push("⚠️ Trop tard si le prix est " + (buy ? "au-dessus de " : "en dessous de ") + "<code>" + px(a.lim, dg) + "</code>");
-  if (s.ok) L.push("", "📲 <b>Dans MT5</b> : " + esc(a.sym) + " › Nouvel ordre › Volume <b>" + s.lotTxt + "</b> › SL <b>" + px(a.sl, dg) + "</b> › TP <b>" + px(a.tp, dg) + "</b> › <b>" + (buy ? "BUY (acheter)" : "SELL (vendre)") + "</b>");
+  const act = "<b>" + (buy ? "BUY (acheter)" : "SELL (vendre)") + "</b>";
+  if (sp) L.push("", "📲 <b>Dans MT5, ouvre 2 ordres</b> :",
+    "1️⃣ Volume <b>" + sp.halfTxt + "</b> › SL <b>" + px(a.sl, dg) + "</b> › TP <b>" + px(a.tp1, dg) + "</b> › " + act,
+    "2️⃣ Volume <b>" + sp.restTxt + "</b> › SL <b>" + px(a.sl, dg) + "</b> › TP <b>" + px(a.tp, dg) + "</b> › " + act,
+    "👉 Quand TP1 est touché, je te préviens : mets le SL de l'ordre 2 au prix d'entrée.");
+  else if (s.ok && two) L.push("", "📲 <b>Dans MT5</b> : " + esc(a.sym) + " › Nouvel ordre › Volume <b>" + s.lotTxt + "</b> › SL <b>" + px(a.sl, dg) + "</b> › TP <b>" + px(a.tp1, dg) + "</b> › " + act);
+  else if (s.ok) L.push("", "📲 <b>Dans MT5</b> : " + esc(a.sym) + " › Nouvel ordre › Volume <b>" + s.lotTxt + "</b> › SL <b>" + px(a.sl, dg) + "</b> › TP <b>" + px(a.tp, dg) + "</b> › " + act);
   if (a.rs) L.push("", "📊 <i>" + esc(String(a.rs).slice(0, 300)) + "</i>");
   if (a.news) L.push("📰 Annonce économique proche : " + esc(String(a.news).slice(0, 100)));
   return L.join("\n");
@@ -629,11 +663,13 @@ function statsLine(st, cur) {
 }
 
 function resultMsg(ev, d, st, cur) {
-  const head = ev.res === "tp" ? "✅ <b>TAKE PROFIT · " : ev.res === "sl" ? "❌ <b>STOP LOSS · " : "⌛ <b>FIN DU TRADE · ";
+  const head = ev.res === "tp" ? (ev.t1 || ev.r1 ? "🚀 <b>TP2 TOUCHÉ · " : "✅ <b>TAKE PROFIT · ") : ev.res === "sl" ? "❌ <b>STOP LOSS · " : ev.res === "be" ? "🟡 <b>RETOUR AU PRIX D'ENTRÉE · " : "⌛ <b>FIN DU TRADE · ";
   const L = [head + esc(ev.sym) + "</b>", SEP];
   if (d.lot > 0) {
-    L.push((d.money >= 0 ? "💰 Résultat : <b>" : "💸 Résultat : <b>") + money(d.money, cur) + "</b> (" + (ev.r > 0 ? "+" : "") + fmt(ev.r, 2) + " R)");
-    if (ev.res !== "tp" && ev.res !== "sl") L.push("👉 Le trade a duré trop longtemps : ferme-le dans MT5 si ce n'est pas déjà fait.");
+    const rr = d.risk > 0 ? d.money / d.risk : 0;
+    L.push((d.money >= 0 ? "💰 Résultat total : <b>" : "💸 Résultat : <b>") + money(d.money, cur) + "</b> (" + (rr > 0 ? "+" : "") + fmt(rr, 2) + " R)");
+    if (ev.res === "be") L.push("👍 La 2e moitié est sortie sans perte : tu gardes le gain de TP1.");
+    if (ev.res !== "tp" && ev.res !== "sl" && ev.res !== "be") L.push("👉 Le trade a duré trop longtemps : ferme-le dans MT5 si ce n'est pas déjà fait.");
   } else {
     L.push("ℹ️ Tu n'avais pas pris ce trade (protection de ton compte).");
   }
@@ -797,7 +833,7 @@ async function onSignal(env, ev) {
     const s = sizeTrade(u, tradeOf(ev));
     const note = s.ok ? (s.marginCapped ? "margin" : null) : s.reason + (s.minCapital ? ":" + s.minCapital : "");
     stmts.push(env.DB.prepare("INSERT INTO deliveries (user_id, alert_id, sid, kind, sym, lot, risk, gain, note, created) VALUES (?, ?, ?, 'signal', ?, ?, ?, ?, ?, ?)")
-      .bind(u.id, alertId, ev.sid, ev.sym, s.ok ? s.lot : 0, s.ok ? round2(s.risk) : round2(s.minRisk || 0), s.ok ? round2(s.gain) : 0, note, t));
+      .bind(u.id, alertId, ev.sid, ev.sym, s.ok ? s.lot : 0, s.ok ? round2(s.risk) : round2(s.minRisk || 0), s.ok ? round2(planGain(ev, s.lot, s.risk)) : 0, note, t));
     outbox.push([u.tg_chat, signalMsg(ev, s, u, cur)]);
   }
   if (stmts.length) await env.DB.batch(stmts);
@@ -840,12 +876,25 @@ async function onResult(env, ev) {
   if (!alertId) return { dup: true };
   const cur = ev.cur || "EUR";
   const r = Number.isFinite(ev.r) ? ev.r : 0;
-  const ds = (await env.DB.prepare("SELECT d.*, u.tg_chat, u.capital, u.stopped_until FROM deliveries d JOIN users u ON u.id = d.user_id WHERE d.sid = ? AND d.kind = 'signal' AND d.result IS NULL")
+  const ds = (await env.DB.prepare("SELECT d.*, u.tg_chat, u.capital, u.stopped_until, a.data AS adata FROM deliveries d JOIN users u ON u.id = d.user_id JOIN alerts a ON a.id = d.alert_id WHERE d.sid = ? AND d.kind = 'signal' AND d.result IS NULL")
     .bind(ev.sid).all()).results || [];
   if (!ds.length) return { result: { users: 0 }, outbox: [] };
   const t = now();
-  for (const d of ds) d.money = d.lot > 0 ? round2(r * d.risk) : 0;
-  await env.DB.batch(ds.map((d) => env.DB.prepare("UPDATE deliveries SET result = ?, r = ?, money = ?, closed = ? WHERE id = ?").bind(ev.res || "exp", r, d.money, t, d.id)));
+  const rx = Number.isFinite(ev.rx) ? ev.rx : r;
+  for (const d of ds) {
+    let a = {};
+    try { a = JSON.parse(d.adata); } catch (e) {}
+    let m = d.lot > 0 ? r * d.risk : 0;
+    if (d.lot > 0 && hasTp1(a)) {
+      const hit = String(d.note || "").includes(";tp1") || ev.t1 === 1;
+      const sp = splitLots(d.lot, a);
+      if (hit && sp) m = d.risk * (sp.f1 * a.r1 + (1 - sp.f1) * rx);
+      else if (hit) m = d.risk * a.r1;
+      else m = d.risk * rx;
+    }
+    d.money = round2(m);
+  }
+  await env.DB.batch(ds.map((d) => env.DB.prepare("UPDATE deliveries SET result = ?, r = ?, money = ?, closed = ? WHERE id = ?").bind(ev.res || "exp", d.risk > 0 ? Math.round(d.money / d.risk * 100) / 100 : r, d.money, t, d.id)));
   const stats = await statsByUser(env, [...new Set(ds.map((d) => d.user_id))]);
   const outbox = [], stops = [];
   for (const d of ds) {
@@ -865,6 +914,35 @@ async function onResult(env, ev) {
   return { result: { users: ds.length, stops: stops.length }, outbox };
 }
 
+async function onTp1(env, ev) {
+  const alertId = await insertAlert(env, ev);
+  if (!alertId) return { dup: true };
+  const cur = ev.cur || "EUR";
+  const ds = (await env.DB.prepare("SELECT d.*, u.tg_chat, a.data AS adata FROM deliveries d JOIN users u ON u.id = d.user_id JOIN alerts a ON a.id = d.alert_id WHERE d.sid = ? AND d.kind = 'signal' AND d.result IS NULL AND d.lot > 0")
+    .bind(ev.sid).all()).results || [];
+  const t = now(), stmts = [], outbox = [];
+  for (const d of ds) {
+    let a = {};
+    try { a = JSON.parse(d.adata); } catch (e) {}
+    if (!hasTp1(a)) continue;
+    const sp = splitLots(d.lot, a);
+    const head = "🎯 <b>TP1 TOUCHÉ · " + esc(ev.sym) + "</b>\n" + SEP + "\n";
+    if (sp) {
+      const g1 = round2(d.risk * sp.f1 * a.r1);
+      stmts.push(env.DB.prepare("UPDATE deliveries SET note = ? WHERE id = ?").bind((d.note || "") + ";tp1", d.id));
+      outbox.push([d.tg_chat, head + "💰 Ordre 1 (" + sp.halfTxt + " lot) fermé à " + px(a.tp1, a.dg) + " : <b>" + money(g1, cur) + "</b>\n" +
+        "👉 <b>Maintenant</b> : mets le Stop Loss de l'ordre 2 à <code>" + px(a.entry, a.dg) + "</code> (ton prix d'entrée).\n" +
+        "🛡️ Ensuite, plus aucun risque : l'ordre 2 vise TP2 à " + px(a.tp, a.dg) + "."]);
+    } else {
+      const g = round2(d.risk * a.r1);
+      stmts.push(env.DB.prepare("UPDATE deliveries SET result = 'tp1', r = ?, money = ?, closed = ? WHERE id = ?").bind(a.r1, g, t, d.id));
+      outbox.push([d.tg_chat, head + "✅ Ton trade est fermé à TP1 : <b>" + money(g, cur) + "</b> 🎉"]);
+    }
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  return { result: { users: stmts.length }, outbox };
+}
+
 async function onStatus(env, ev) {
   await kvSet(env, "status", ev);
   const off = await kvGet(env, "robot_off");
@@ -875,7 +953,7 @@ async function onStatus(env, ev) {
 }
 
 function bad(message) { const e = new Error(message); e.status = 400; throw e; }
-const NUM_FIELDS = ["entry", "sl", "tp", "lim", "r", "exit", "vpe", "npe", "vmin", "vstep", "vmax", "rr", "slp", "tpp", "at", "vu", "dg", "px", "sld"];
+const NUM_FIELDS = ["entry", "sl", "tp", "lim", "r", "exit", "vpe", "npe", "vmin", "vstep", "vmax", "rr", "slp", "tpp", "at", "vu", "dg", "px", "sld", "tp1", "r1", "r2", "rx", "t1"];
 async function onRobotEvent(env, ev) {
   const type = String(ev.type || "");
   if (type === "status") return onStatus(env, ev);
@@ -891,6 +969,7 @@ async function onRobotEvent(env, ev) {
   if (type === "pre") return onPre(env, ev);
   if (type === "cancel") return onCancel(env, ev);
   if (type === "result") return onResult(env, ev);
+  if (type === "tp1") return onTp1(env, ev);
   bad("type inconnu : " + type);
 }
 

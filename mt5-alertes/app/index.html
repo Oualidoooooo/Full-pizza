@@ -399,7 +399,7 @@ function demoData() {
   const sig = (id, sym, side, entry, sl, tp, dg, lot, risk, created, extra = {}) => {
     const pip = dg === 3 ? 0.01 : dg === 2 ? 0.1 : 0.0001;
     return { id, kind: "signal", sym, lot, risk, gain: risk * 2, note: null, result: null, r: null, money: null, created,
-      data: { sym, side, tf: "H1", entry, sl, tp, dg, rr: 2, lim: side === "buy" ? entry + (entry - sl) * 0.2 : entry - (sl - entry) * 0.2, vu: created + 900,
+      data: { sym, side, tf: "H1", entry, sl, tp: side === "buy" ? entry + (entry - sl) * 3 : entry - (sl - entry) * 3, tp1: side === "buy" ? entry + (entry - sl) : entry - (sl - entry), r1: 1, r2: 3, vmin: 0.01, vstep: 0.01, dg, rr: 2, tpp: Math.abs(entry - sl) * 3 / pip, lim: side === "buy" ? entry + (entry - sl) * 0.2 : entry - (sl - entry) * 0.2, vu: created + 900,
         slp: Math.abs(entry - sl) / pip, rs: "Tendance haussière (prix au-dessus de l'EMA 200) · confirmée en H4 · tendance forte (ADX 27)" }, ...extra };
   };
   S.alerts = [
@@ -545,9 +545,17 @@ function liveCard() {
   return "";
 }
 
+function splitLots(lot, d) {
+  const step = d.vstep > 0 ? d.vstep : 0.01, vmin = d.vmin > 0 ? d.vmin : step;
+  const dec = String(step).includes(".") ? String(step).split(".")[1].length : 0;
+  const half = +(Math.floor(lot / 2 / step + 1e-9) * step).toFixed(dec), rest = +(lot - half).toFixed(dec);
+  return half < vmin - 1e-9 || rest < vmin - 1e-9 ? null : { half: half.toFixed(dec), rest: rest.toFixed(dec), f1: half / lot };
+}
+
 function signalCard(a) {
   const d = a.data || {}, buy = d.side === "buy", dg = d.dg, t = nowS();
   const lot = a.lot > 0 ? lotTxt(a.lot) : null;
+  const two = d.tp1 > 0 && d.r1 > 0;
   let html = '<div class="live ' + (buy ? "buy" : "sell") + '"><div class="live-top"><span class="side ' + (buy ? "buy" : "sell") + '">' + (buy ? "🟢 ACHAT" : "🔴 VENTE") + '</span><span class="sym">' + esc(a.sym) + "</span>" +
     (d.vu > t ? '<span class="timer" data-left="' + d.vu + '"></span>' : "") + "</div>" +
     '<p class="muted small" style="margin-top:4px">' + esc(symName(a.sym) || "Signal") + (d.tf ? " · " + esc(d.tf) : "") + " · touche un prix pour le copier</p>" +
@@ -555,11 +563,19 @@ function signalCard(a) {
     '<button class="tile copy" data-copy="' + px(d.entry, dg) + '" data-label="Entrée"><small>💶 Entrée</small><b>' + px(d.entry, dg) + "</b></button>" +
     '<button class="tile copy" data-copy="' + (lot || "") + '" data-label="Volume"><small>📦 Volume</small><b>' + (lot || "—") + "</b><em>" + (lot ? "lot" : "pas de trade") + "</em></button>" +
     '<button class="tile copy sl" data-copy="' + px(d.sl, dg) + '" data-label="Stop Loss"><small>🛑 Stop Loss</small><b>' + px(d.sl, dg) + "</b><em>" + (d.slp ? "−" + fmt(d.slp, 1) + " pips" : "") + "</em></button>" +
-    '<button class="tile copy tp" data-copy="' + px(d.tp, dg) + '" data-label="Take Profit"><small>🎯 Take Profit</small><b>' + px(d.tp, dg) + "</b><em>" + (d.slp ? "+" + fmt(d.slp * (d.rr || 2), 1) + " pips" : "") + "</em></button>" +
+    (two ? '<button class="tile copy tp" data-copy="' + px(d.tp1, dg) + '" data-label="TP1"><small>🎯 TP1 (sûr)</small><b>' + px(d.tp1, dg) + "</b><em>" + (d.slp ? "+" + fmt(d.slp * d.r1, 1) + " pips" : "") + "</em></button>" : "") +
+    '<button class="tile copy tp" data-copy="' + px(d.tp, dg) + '" data-label="' + (two ? "TP2" : "Take Profit") + '"><small>' + (two ? "🚀 TP2" : "🎯 Take Profit") + "</small><b>" + px(d.tp, dg) + "</b><em>" + (d.tpp ? "+" + fmt(d.tpp, 1) + " pips" : "") + "</em></button>" +
     "</div>";
   if (lot) {
-    html += '<div class="money2"><div class="lose"><small>🔴 Si Stop Loss</small><b>' + eur(-a.risk, true) + '</b></div><div class="win"><small>🟢 Si Take Profit</small><b>' + eur(a.gain, true) + "</b></div></div>" +
-      '<div class="howto">⚠️ Trop tard si le prix est ' + (buy ? "au-dessus de " : "en dessous de ") + "<b>" + px(d.lim, dg) + "</b><br>📲 Dans MT5 : <b>" + esc(a.sym) + "</b> › Nouvel ordre › Volume <b>" + lot + "</b> › SL <b>" + px(d.sl, dg) + "</b> › TP <b>" + px(d.tp, dg) + "</b> › <b>" + (buy ? "BUY" : "SELL") + "</b></div>";
+    const sp = two ? splitLots(a.lot, d) : null;
+    const act = "<b>" + (buy ? "BUY" : "SELL") + "</b>";
+    html += '<div class="money2"><div class="lose"><small>🔴 Si Stop Loss</small><b>' + eur(-a.risk, true) + '</b></div><div class="win"><small>🟢 ' + (two ? (sp ? "Si TP1 + TP2" : "Si TP1") : "Si Take Profit") + "</small><b>" + eur(a.gain, true) + "</b></div></div>" +
+      (sp ? '<p class="small" style="margin-top:8px">🟡 Si TP1 puis retour au prix d\'entrée : <b class="green">' + eur(a.risk * sp.f1 * d.r1, true) + "</b> (tu restes gagnant)</p>" : "") +
+      '<div class="howto">⚠️ Trop tard si le prix est ' + (buy ? "au-dessus de " : "en dessous de ") + "<b>" + px(d.lim, dg) + "</b><br>" +
+      (sp ? "📲 Dans MT5, ouvre <b>2 ordres</b> sur " + esc(a.sym) + " :<br>1️⃣ Volume <b>" + sp.half + "</b> › SL <b>" + px(d.sl, dg) + "</b> › TP <b>" + px(d.tp1, dg) + "</b> › " + act +
+            "<br>2️⃣ Volume <b>" + sp.rest + "</b> › SL <b>" + px(d.sl, dg) + "</b> › TP <b>" + px(d.tp, dg) + "</b> › " + act + "<br>👉 À TP1, mets le SL de l'ordre 2 au prix d'entrée."
+          : "📲 Dans MT5 : <b>" + esc(a.sym) + "</b> › Nouvel ordre › Volume <b>" + lot + "</b> › SL <b>" + px(d.sl, dg) + "</b> › TP <b>" + px(two ? d.tp1 : d.tp, dg) + "</b> › " + act +
+            (two ? "<br>ℹ️ Volume trop petit pour couper en deux : vise seulement TP1." : "")) + "</div>";
   } else html += '<div class="skip">⛔ <b>Passe ton tour</b> : ' + skipText(a) + "</div>";
   if (d.rs) html += '<p class="muted small" style="margin-top:10px">📊 ' + esc(d.rs) + "</p>";
   return html + "</div>";
@@ -608,14 +624,16 @@ function alertRow(a) {
   if (a.kind === "cancel") return '<div class="alert"><div class="ic grey">⚪</div><div class="body"><div class="t1">Annulé · ' + esc(a.sym) + '<span class="when">' + when(a.created) + '</span></div><div class="t2">Les conditions ne sont plus réunies. Rien à faire.</div></div></div>';
   const buy = d.side === "buy";
   let pill;
-  if (a.result === "tp") pill = '<span class="pill green">✅ ' + eur(a.money, true) + "</span>";
+  if (a.result === "tp" || a.result === "tp1") pill = '<span class="pill green">✅ ' + eur(a.money, true) + "</span>";
+  else if (a.result === "be") pill = '<span class="pill green">🟡 ' + eur(a.money, true) + "</span>";
+  else if (!a.result && String(a.note || "").includes(";tp1")) pill = '<span class="pill green">🎯 TP1 touché</span>';
   else if (a.result === "sl") pill = '<span class="pill red">❌ ' + eur(a.money, true) + "</span>";
   else if (a.result) pill = '<span class="pill ' + (a.money >= 0 ? "green" : "red") + '">⌛ ' + eur(a.money, true) + "</span>";
   else if (!(a.lot > 0)) pill = '<span class="pill grey">⛔ pas pris</span>';
   else if (d.vu > nowS()) pill = '<span class="pill blue">⏱ jusqu\'à ' + hhmm(d.vu) + "</span>";
   else pill = '<span class="pill gold">⏳ en cours</span>';
   const line = a.lot > 0
-    ? 'Entrée <span class="num">' + px(d.entry, d.dg) + '</span> · SL <span class="num">' + px(d.sl, d.dg) + '</span> · TP <span class="num">' + px(d.tp, d.dg) + "</span><br>📦 " + lotTxt(a.lot) + ' lot · <span class="red">' + eur(-a.risk) + '</span> / <span class="green">' + eur(a.gain, true) + "</span>"
+    ? 'Entrée <span class="num">' + px(d.entry, d.dg) + '</span> · SL <span class="num">' + px(d.sl, d.dg) + "</span>" + (d.tp1 > 0 ? ' · TP1 <span class="num">' + px(d.tp1, d.dg) + '</span> · TP2 <span class="num">' : ' · TP <span class="num">') + px(d.tp, d.dg) + "</span><br>📦 " + lotTxt(a.lot) + ' lot · <span class="red">' + eur(-a.risk) + '</span> / <span class="green">' + eur(a.gain, true) + "</span>"
     : skipText(a);
   return '<div class="alert"><div class="ic ' + (buy ? "green" : "red") + '">' + (buy ? "🟢" : "🔴") + '</div><div class="body"><div class="t1">' + (buy ? "Achat" : "Vente") + " · " + esc(a.sym) + " " + pill + '<span class="when">' + when(a.created) + '</span></div><div class="t2">' + line + "</div></div></div>";
 }
