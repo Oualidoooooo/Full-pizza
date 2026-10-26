@@ -58,6 +58,8 @@ input double InpAdxMin       = 20.0;          // Force de tendance minimale (ADX
 input bool   InpOnePerSymbol = true;          // Un seul signal à la fois par marché (attend TP, SL ou expiration)
 input bool   InpPreAlert     = true;          // Pré-alerte juste avant la clôture de la bougie
 input int    InpPreAlertSec  = 60;            // Secondes avant la clôture pour la pré-alerte
+input int    InpHourStart    = 6;             // Signaux à partir de cette heure (heure de ton PC)
+input int    InpHourEnd      = 19;            // Plus de nouveau signal à partir de cette heure
 input int    InpValidMin     = 15;            // Minutes pendant lesquelles un signal reste bon à prendre
 
 //--- Suivi des résultats
@@ -1234,10 +1236,27 @@ void CatchUpTracks()
 //+------------------------------------------------------------------+
 //| Construction d'un signal complet                                 |
 //+------------------------------------------------------------------+
+//--- plage horaire des signaux (heure du PC). Le suivi des trades en cours continue la nuit.
+bool InHours(const int secondsAhead = 0)
+  {
+   if(InpHourStart == InpHourEnd || MQLInfoInteger(MQL_TESTER))
+      return true;
+   MqlDateTime t;
+   TimeToStruct(TimeLocal() + secondsAhead, t);
+   if(InpHourStart < InpHourEnd)
+      return t.hour >= InpHourStart && t.hour < InpHourEnd;
+   return t.hour >= InpHourStart || t.hour < InpHourEnd; // plage qui passe minuit
+  }
+
 //--- reason : une raison par ligne, séparées par "\n- "
 bool SendSignal(const string sym, const bool buy, const string reason, const double atr)
   {
    string tf = TfName(InpTimeframe);
+   if(!InHours())
+     {
+      Print(sym, " : signal ignoré, en dehors des heures (", InpHourStart, "h - ", InpHourEnd, "h).");
+      return false;
+     }
    if(InpOnePerSymbol && InpTrack && HasOpenTrack(sym))
      {
       Print(sym, " : signal ignoré, le précédent signal sur ce marché est toujours en cours.");
@@ -1416,6 +1435,8 @@ void CheckPreAlert(SymState &st)
       return;
    int left = (int)(bar + PeriodSeconds(InpTimeframe) - TimeTradeServer());
    if(left > InpPreAlertSec || left < 5)
+      return;
+   if(!InHours(left))
       return;
    if(InpOnePerSymbol && InpTrack && HasOpenTrack(st.name))
       return;
