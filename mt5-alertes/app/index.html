@@ -509,9 +509,16 @@ function viewMain() {
     '<nav class="nav"><div class="nav-in">' + tabs.map(([k, i, l]) => '<button data-tab="' + k + '" class="' + (S.tab === k ? "on" : "") + '"><span class="i">' + i + "</span>" + l + "</button>").join("") + "</div></nav>";
 }
 
+function botCard() {
+  return '<div class="card tone-gold"><h3>🤖 Branche ton bot Telegram</h3>' +
+    '<p class="muted small">Une seule fois : colle le jeton de ton bot (donné par @BotFather), en entier.</p><div style="margin-top:12px">' +
+    field("bottoken", "Jeton du bot", { ph: "123456789:AAH..." }) + '</div><button class="btn" data-act="claim">Brancher le bot</button></div>';
+}
+
 function telegramCard(full) {
   const u = S.me.user;
   if (u.telegram.linked) return "";
+  if (!S.me.bot) return u.admin && !S.demo ? botCard() : '<div class="card tone-gold"><h3>⏳ Bot pas encore prêt</h3><p class="muted small">L\'administrateur doit d\'abord brancher le bot. Réessaie un peu plus tard.</p></div>';
   return '<div class="card tone-blue"><h3>📲 Relie ton Telegram</h3>' +
     '<p class="muted small">C\'est là que tu reçois les alertes calculées pour ton argent. Ça prend 10 secondes :</p>' +
     '<ol class="steps"><li>Touche le bouton bleu : Telegram s\'ouvre sur le bot</li><li>Touche <b>DÉMARRER</b> (ou <b>START</b>) en bas</li><li>Reviens ici : c\'est relié ✅</li></ol>' +
@@ -770,6 +777,13 @@ async function act(name, el) {
         S.markets = await api("/api/markets");
       } catch (e) { S.error = e.message; }
       S.busy = false; return render();
+    }
+    if (name === "claim") {
+      const v = ($("#f_bottoken").value || "").match(/\d{5,}:[A-Za-z0-9_-]{30,}/);
+      if (!v) return toast("⚠️ Colle le jeton en entier (chiffres:lettres)");
+      await api("/robot/claim", "POST", { token: v[0] });
+      toast("✅ Bot branché !"); S.form = {};
+      await refresh(); return;
     }
     if (name === "test") { await api("/api/me/test", "POST"); return toast("📨 Message envoyé sur ton Telegram"); }
     if (name === "relink") { if (!confirm("Délier ce Telegram et créer un nouveau code ?")) return; setMe(await api("/api/me/relink", "POST")); return render(); }

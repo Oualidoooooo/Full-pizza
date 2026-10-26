@@ -1,5 +1,5 @@
 // Garde l'appli disponible hors ligne. Les données du robot ne sont jamais mises en cache.
-const CACHE = "alertespro-v11";
+const CACHE = "alertespro-v12";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icon.svg", "icon-180.png", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", (e) => {
