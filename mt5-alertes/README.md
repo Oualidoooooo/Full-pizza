@@ -65,16 +65,55 @@ Un signal n'est envoyé que si **toutes** les conditions sont réunies :
 5. **Un seul signal à la fois par marché** : le robot attend que le précédent
    touche son TP, son SL ou expire.
 
-Exemple de message :
+### Comment se passe un signal
+
+1. **⏳ Pré-alerte, 1 min avant la clôture de la bougie** : un signal est en
+   train de se former. Ouvre MT5 sur le marché indiqué. Si, à la clôture, les
+   conditions ne sont plus réunies, tu reçois « Pré-alerte annulée ».
+2. **🟢 / 🔴 Signal** à la clôture : tout ce qu'il faut pour passer l'ordre
+   tout de suite. Il reste valable 15 minutes (réglable).
+3. **✅ / ❌ Résultat** quand le Take Profit ou le Stop Loss est touché.
+
+Personne ne peut connaître le marché à l'avance : la pré-alerte annonce un
+signal probable, pas certain. C'est pour ça qu'on attend la confirmation.
+
+Exemple de signal :
 
 ```
-SIGNAL ACHAT EURUSD H1
-Croisement haussier MM20/MM50, prix au-dessus de l'EMA200
-Entrée 1.08512
-SL 1.08197 (31.5 pips)
-TP 1.09142 (63.0 pips)
-Lot 0.31 = risque 97.65 EUR (1.0 %)
+🟢 ACHAT EURUSD MAINTENANT (H1)
+Entrée 1.08512 | SL 1.08197 | TP 1.09142 | Lot 0.31
+À prendre avant 14:15
+
+👉 QUOI FAIRE DANS MT5
+1. Cotations > EURUSD > Nouvel ordre
+2. Exécution au marché, volume 0.31
+3. Stop Loss : 1.08197
+4. Take Profit : 1.09142
+5. Touche ACHETER (Buy)
+
+💰 CE QUE TU RISQUES
+Stop Loss touché : -97.65 EUR (1.0 % du compte)
+Take Profit touché : +195.30 EUR (2.0 fois le risque)
+
+📍 LES PRIX
+Entrée : 1.08512 (prix actuel)
+Stop Loss : 1.08197 (31.5 pips plus bas)
+Take Profit : 1.09142 (63.0 pips plus haut)
+
+❓ POURQUOI
+- MM20 / MM50 : croisement à la hausse
+- Prix au-dessus de l'EMA 200 (tendance haussière)
+- Tendance haussière confirmée en H4
+- Tendance forte (ADX 27)
+
+⚠️ N'achète pas si le prix est déjà au-dessus de 1.08575 : le signal est passé.
+Ne déplace jamais ton Stop Loss.
+Je te préviens quand le TP ou le SL est touché.
 ```
+
+Les 3 premières lignes contiennent l'essentiel : c'est ce que tu vois dans une
+notification push (limitée à 255 caractères). Le message complet arrive sur
+Telegram et dans l'appli.
 
 ### Comment sont calculés le stop, l'objectif et le lot
 

@@ -149,6 +149,18 @@ input{font:inherit;color:inherit}
 .ic.summary,.ic.info{background:var(--card3);color:var(--muted)}
 .ic.result{background:var(--buy-bg);color:var(--buy)}
 .ic.result.loss{background:var(--sell-bg);color:var(--sell)}
+.ic.pre{background:var(--gold-bg);color:var(--gold)}
+.pre-card{display:flex;gap:12px;align-items:flex-start;padding:15px;border-radius:var(--radius);background:var(--gold-bg);border:1px solid rgba(245,185,74,.4);margin-bottom:14px;animation:glow 1.4s ease-in-out infinite alternate}
+.pre-card svg{flex:none;width:28px;height:28px;color:var(--gold)}
+.pre-card b{display:block;color:var(--gold);font-size:16px;font-weight:800}
+.pre-card p{font-size:13.5px;margin-top:3px}
+@keyframes glow{from{box-shadow:0 0 0 0 rgba(245,185,74,0)}to{box-shadow:0 0 0 5px rgba(245,185,74,.16)}}
+.how{margin-top:12px;border-top:1px solid var(--line);padding-top:11px}
+.how summary{cursor:pointer;font-size:13.5px;font-weight:700;color:var(--accent);list-style:none}
+.how summary::-webkit-details-marker{display:none}
+.how summary:before{content:"▸ "}.how[open] summary:before{content:"▾ "}
+.how .steps{margin-top:12px}
+.how .steps li{color:var(--text)}
 .it-body{min-width:0;flex:1}
 .it-title{font-weight:600;font-size:14px;display:flex;justify-content:space-between;gap:10px}
 .it-title time{flex:none;font-weight:500;font-size:12px;color:var(--dim)}
@@ -255,6 +267,8 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
   <!-- ACCUEIL -->
   <section class="view on" id="v-home">
     <div id="setupBanner"></div>
+    <div id="preWrap"></div>
+    <div id="howWrap"></div>
     <div id="hero"></div>
     <div id="perfHome"></div>
     <div class="sec-title"><h2>Dernier signal</h2><button data-go="signals">Tous les signaux</button></div>
@@ -444,6 +458,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/>',
     check: '<path d="M20 6L9 17l-5-5"/>',
     result: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+    pre: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 2h6"/>',
     copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/>'
   };
@@ -475,7 +490,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
   }
 
   function alertUser(m) {
-    if (S.sound && (m.kind === "signal" || m.kind === "result")) beep();
+    if (S.sound && (m.kind === "signal" || m.kind === "result" || m.kind === "pre")) beep();
     if (S.notif && document.hidden && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(m.title || "AlertesPro", { body: m.message.slice(0, 180), icon: "icon-180.png", tag: m.id }); } catch (e) {}
     }
@@ -598,7 +613,8 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     const sym = (d.sym || "").toUpperCase(), rr = num(d.rr) || 2;
     const entry = num(d.entry), sl = num(d.sl), tp = num(d.tp), dg = Math.max(decimals(d.entry), decimals(d.sl));
     const lines = m.message.split("\n");
-    const reason = lines[1] || "";
+    const reason = d.rs ? d.rs.replace(/;/g, ",") : (lines[1] || "");
+    const cur = d.cur || "", lot = num(d.lot) > 0 ? d.lot : "";
     const isNew = Date.now() / 1000 - m.time < 3600;
     const state = signalState(m, ctx);
     const price = marketPrice(sym);
@@ -611,8 +627,18 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
       const pctTxt = toTp >= 0 ? fmt(Math.min(toTp, 1) * 100, 0) + " % vers le TP" : fmt(Math.min(-toTp * rr, 1) * 100, 0) + " % vers le SL";
       progress = '<span class="chip ' + (toTp >= 0 ? "ok" : "warn") + '">Prix actuel <span class="num">' + price.toFixed(dg) + "</span> · " + pctTxt + "</span>";
     }
-    const lotTxt = num(d.lot) > 0 ? '<span class="chip">Lot <b class="num">' + esc(d.lot) + '</b></span><span class="chip">Risque <b class="num">' + fmt(num(d.risk)) + " " + esc(d.cur || "") + "</b></span>"
-      : '<span class="chip warn">Lot minimum trop gros : passe ton tour</span>';
+    const lotTxt = lot ? '<span class="chip">Lot <b class="num">' + esc(lot) + '</b></span><span class="chip">Perte si SL <b class="num down">-' + fmt(num(d.risk)) + " " + esc(cur) + "</b></span>" +
+        '<span class="chip">Gain si TP <b class="num up">+' + fmt(num(d.risk) * rr) + " " + esc(cur) + "</b></span>"
+      : '<span class="chip warn">Lot minimum trop gros : ne prends pas ce trade</span>';
+    const vu = num(d.vu), fresh = isFinite(vu) && Date.now() / 1000 < vu;
+    const validChip = state.done || !isFinite(vu) ? "" : fresh ? '<span class="chip ok">À prendre avant ' + hhmm(vu) + "</span>" : '<span class="chip warn">Trop tard pour entrer</span>';
+    const how = state.done || !lot ? "" : '<details class="how"' + (fresh ? " open" : "") + "><summary>Comment passer l'ordre dans MT5</summary><ol class=\"steps\">" +
+      "<li>Ouvre MT5 › <b>Cotations</b> › touche <b>" + esc(sym) + "</b> › <b>Nouvel ordre</b></li>" +
+      "<li><b>Exécution au marché</b>, volume <b class=\"num\">" + esc(lot) + "</b></li>" +
+      "<li>Stop Loss : <b class=\"num down\">" + esc(d.sl) + "</b></li>" +
+      "<li>Take Profit : <b class=\"num up\">" + esc(d.tp) + "</b></li>" +
+      "<li>Touche <b>" + (buy ? "ACHETER (Buy)" : "VENDRE (Sell)") + "</b></li></ol>" +
+      (d.lim ? '<p class="dim" style="font-size:12.5px">' + (buy ? "N'achète pas si le prix est déjà au-dessus de " : "Ne vends pas si le prix est déjà en dessous de ") + '<b class="num">' + esc(d.lim) + "</b> : le signal est passé. Ne déplace jamais ton Stop Loss.</p>" : "") + "</details>";
     const newsWarn = /Attention annonce/.test(m.message) ? '<span class="chip warn">Annonce proche</span>' : "";
     const lv = (cls, lbl, val, sub) => '<button class="lv ' + cls + '" data-copy="' + esc(val) + '"><span>' + lbl + "</span><b class=\"num\">" + esc(val) + "</b>" + (sub ? "<i>" + sub + "</i>" : "") + "</button>";
     const order = (buy ? "ACHAT " : "VENTE ") + sym + (num(d.lot) > 0 ? " " + d.lot + " lot" : "") + " | SL " + (d.sl || "") + " | TP " + (d.tp || "");
@@ -625,7 +651,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
       '<div class="levels">' + lv("", "ENTRÉE", d.entry, "") + lv("sl", "STOP", d.sl, esc(d.slp || "") + " pips") + lv("tp", "OBJECTIF", d.tp, esc(d.tpp || "") + " pips") + "</div>" + '<p class="copy-hint">Touche un prix pour le copier.</p>' +
       (compact ? "" : '<div class="rr"><div class="r" style="flex:1"></div><div class="g" style="flex:' + rr + '"></div>' + mark + "</div>" +
       '<div class="rr-lbl"><span>SL</span><span>Entrée</span><span>TP · ratio 1:' + fmt(rr, rr % 1 ? 1 : 0) + "</span></div>") +
-      '<div class="sig-foot">' + lotTxt + newsWarn + progress + copyOrder + "</div></article>";
+      '<div class="sig-foot">' + validChip + lotTxt + newsWarn + progress + copyOrder + "</div>" + how + "</article>";
   }
 
   function signalCtx() {
@@ -763,7 +789,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     }).join("") + "</div>" : '<div class="card" style="display:flex;gap:12px;align-items:center"><div class="ic news">' + icon("news") + '</div><div class="muted" style="font-size:13.5px">Aucune annonce forte dans les prochaines 30 min. Le robot te prévient avant chacune.</div></div>';
   }
 
-  const FEED_KINDS = { all: "Tout", signal: "Signaux", result: "Résultats", news: "Annonces", trade: "Positions", account: "Compte", line: "Lignes", market: "Marché", summary: "Résumés", info: "Infos" };
+  const FEED_KINDS = { all: "Tout", pre: "Pré-alertes", signal: "Signaux", result: "Résultats", news: "Annonces", trade: "Positions", account: "Compte", line: "Lignes", market: "Marché", summary: "Résumés", info: "Infos" };
   function renderFeed() {
     const msgs = all().filter((m) => m.kind !== "status");
     const present = new Set(msgs.map((m) => m.kind));
@@ -780,8 +806,41 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
   }
 
   function renderBanner() {
-    $("setupBanner").innerHTML = (!S.code && !S.demo)
+    $("setupBanner").innerHTML = S.demo
+      ? '<div class="banner"><div class="ic news">' + icon("info") + '</div><p><b>Mode démo</b><br>Ces signaux sont des exemples, pas des vrais. Les vrais arrivent quand ton robot MT5 est connecté.</p><button class="btn" data-go="settings">Connecter</button></div>'
+      : !S.code
       ? '<div class="banner"><div class="ic news">' + icon("info") + '</div><p><b>Connecte ton robot</b><br>Crée ton code dans Réglages, ou essaie le mode démo.</p><button class="btn" data-go="settings">Régler</button></div>' : "";
+  }
+
+  // pré-alertes encore valables (pas encore suivies d'un signal ou d'une annulation)
+  function pendingPre() {
+    const now = Date.now() / 1000, msgs = all();
+    const same = (a, b) => (a.d.sym || "").toUpperCase() === (b.d.sym || "").toUpperCase();
+    return msgs.filter((m) => m.kind === "pre" && (m.d.ev || "pre") === "pre" && now - m.time < 900)
+      .filter((p) => now < (num(p.d.at) || p.time + 60) + 120)
+      .filter((p) => !msgs.some((x) => x.id !== p.id && x.time >= p.time && same(x, p) && (x.kind === "signal" || (x.kind === "pre" && x.d.ev === "cancel"))));
+  }
+
+  function renderPre() {
+    $("preWrap").innerHTML = pendingPre().map((p) => {
+      const buy = (p.d.side || "").toLowerCase() === "buy", sym = (p.d.sym || "").toUpperCase();
+      const at = num(p.d.at) || p.time + 60, left = Math.round(at - Date.now() / 1000);
+      const when = left > 0 ? "dans " + (left >= 90 ? Math.round(left / 60) + " min" : left + " s") : "d'un instant à l'autre";
+      return '<div class="pre-card">' + icon("pre") + "<div><b>Prépare-toi : " + (buy ? "ACHAT " : "VENTE ") + esc(sym) + "</b>" +
+        "<p>Signal possible à <b class=\"num\" style=\"display:inline;font-size:inherit\">" + hhmm(at) + "</b> (" + when + "). Ouvre MT5 sur " + esc(sym) + " maintenant.</p>" +
+        '<p class="muted">Attends la confirmation avec l\'entrée, le Stop Loss et le Take Profit avant d\'entrer.</p></div></div>';
+    }).join("");
+  }
+
+  function renderHow() {
+    const hasSignal = all().some((m) => m.kind === "signal");
+    $("howWrap").innerHTML = (S.demo || !hasSignal)
+      ? '<div class="sec-title" style="margin-top:4px"><h2>Comment ça marche</h2></div><div class="card"><ol class="steps">' +
+        "<li><b>⏳ Pré-alerte, 1 min avant</b> : un signal se prépare. Ouvre MT5 sur le marché indiqué.</li>" +
+        "<li><b>🟢 Signal ACHAT ou 🔴 VENTE</b> : tu reçois l'entrée, le Stop Loss, le Take Profit et le lot. Passe l'ordre tout de suite, avant l'heure indiquée.</li>" +
+        "<li><b>✅ Résultat</b> : je te préviens quand le Take Profit ou le Stop Loss est touché.</li></ol>" +
+        '<p class="dim" style="font-size:12.5px">Personne ne peut connaître le marché à l\'avance : un signal est une probabilité, pas une certitude. C\'est pour ça qu\'il y a toujours un Stop Loss.</p></div>'
+      : "";
   }
 
   function renderBadges() {
@@ -798,7 +857,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     "Pas deux positions sur la même devise dans le même sens.", "Un signal n'est pas une obligation : si le graphique ne te plaît pas, passe ton tour."];
 
   function render() {
-    renderBanner(); renderHero(); renderPerf(); renderSignals(); renderPositions(); renderNews(); renderMarkets(); renderFeed(); renderBadges();
+    renderBanner(); renderPre(); renderHow(); renderHero(); renderPerf(); renderSignals(); renderPositions(); renderNews(); renderMarkets(); renderFeed(); renderBadges();
   }
 
   // ---------- Calculatrice ----------
@@ -857,23 +916,39 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
       if (k === 0) tags.push("st=14|7|5.20|14.00|8.80", "o=EURUSD-1|EURUSD|buy|1.08512|1.08197|1.09142", "p=EURUSD|buy|0.31|98.20|1", "p=XAUUSD|buy|0.05|44.40|1");
       out.push(mk(k * 900 + 30, "status", "Statut", "Mise à jour du compte", tags));
     }
-    const sig = (ago, sid, side, sym, reason, entry, sl, tp, slp, tpp, lot, risk) => mk(ago, "signal", "SIGNAL " + (side === "buy" ? "ACHAT " : "VENTE ") + sym + " H1",
-      "SIGNAL " + (side === "buy" ? "ACHAT " : "VENTE ") + sym + " H1\n" + reason + "\nEntrée " + entry + "\nSL " + sl + " (" + slp + " pips)\nTP " + tp + " (" + tpp + " pips)\nLot " + lot + " = risque " + risk + " EUR (1.0 %)",
-      ["sid=" + sid, "exp=48", "sym=" + sym, "side=" + side, "tf=H1", "entry=" + entry, "sl=" + sl, "tp=" + tp, "slp=" + slp, "tpp=" + tpp, "lot=" + lot, "risk=" + risk, "cur=EUR", "rr=2.0"]);
+    const sig = (ago, sid, side, sym, reasons, entry, sl, tp, slp, tpp, lot, risk, lim) => {
+      const buy = side === "buy", until = now - ago + 15 * 60;
+      const msg = (buy ? "🟢 ACHAT " : "🔴 VENTE ") + sym + " MAINTENANT (H1)\nEntrée " + entry + " | SL " + sl + " | TP " + tp + " | Lot " + lot +
+        "\nÀ prendre avant " + hhmm(until) + "\n\n👉 QUOI FAIRE DANS MT5\n1. Cotations > " + sym + " > Nouvel ordre\n2. Exécution au marché, volume " + lot +
+        "\n3. Stop Loss : " + sl + "\n4. Take Profit : " + tp + "\n5. Touche " + (buy ? "ACHETER (Buy)" : "VENDRE (Sell)") +
+        "\n\n💰 CE QUE TU RISQUES\nStop Loss touché : -" + risk + " EUR (1.0 % du compte)\nTake Profit touché : +" + (2 * risk).toFixed(2) + " EUR (2.0 fois le risque)" +
+        "\n\n📍 LES PRIX\nEntrée : " + entry + " (prix actuel)\nStop Loss : " + sl + " (" + slp + " pips " + (buy ? "plus bas" : "plus haut") + ")\nTake Profit : " + tp + " (" + tpp + " pips " + (buy ? "plus haut" : "plus bas") + ")" +
+        "\n\n❓ POURQUOI\n- " + reasons.join("\n- ") + "\n\n⚠️ " + (buy ? "N'achète pas si le prix est déjà au-dessus de " : "Ne vends pas si le prix est déjà en dessous de ") + lim +
+        " : le signal est passé.\nNe déplace jamais ton Stop Loss.\nJe te préviens quand le TP ou le SL est touché.";
+      return mk(ago, "signal", msg.split("\n")[0], msg, ["sid=" + sid, "exp=48", "sym=" + sym, "side=" + side, "tf=H1", "entry=" + entry, "sl=" + sl, "tp=" + tp, "lim=" + lim,
+        "slp=" + slp, "tpp=" + tpp, "lot=" + lot, "risk=" + risk, "cur=EUR", "rr=2.0", "vu=" + until, "rs=" + reasons.join(" · ").replace(/,/g, ";")]);
+    };
+    const pre = (ago, side, sym, inSec) => {
+      const at = now - ago + inSec, txt = (side === "buy" ? "ACHAT " : "VENTE ") + sym;
+      return mk(ago, "pre", "⏳ PRÉPARE-TOI : " + txt + " possible à " + hhmm(at) + " (dans 1 min)",
+        "⏳ PRÉPARE-TOI : " + txt + " possible à " + hhmm(at) + " (dans 1 min)\nOuvre MT5 sur " + sym + " maintenant.\nJe confirme à la clôture de la bougie avec l'entrée, le Stop Loss, le Take Profit et le lot.\nN'entre pas avant la confirmation : le signal peut encore s'annuler.",
+        ["sym=" + sym, "side=" + side, "ev=pre", "at=" + at, "tf=H1"]);
+    };
     const res = (ago, sid, side, sym, kind, r, entry, exit, st) => mk(ago, "result",
       (kind === "tp" ? "TAKE PROFIT TOUCHÉ" : kind === "sl" ? "STOP LOSS TOUCHÉ" : "SIGNAL EXPIRÉ") + " : " + (side === "buy" ? "ACHAT " : "VENTE ") + sym,
       (kind === "tp" ? "TAKE PROFIT TOUCHÉ" : kind === "sl" ? "STOP LOSS TOUCHÉ" : "SIGNAL EXPIRÉ") + " : " + (side === "buy" ? "ACHAT " : "VENTE ") + sym + "\nEntrée " + entry + " -> sortie " + exit + "\nRésultat " + (r > 0 ? "+" : "") + r.toFixed(2) + " R",
       ["sid=" + sid, "sym=" + sym, "side=" + side, "res=" + kind, "r=" + r.toFixed(2), "exit=" + exit, "st=" + st]);
     out.push(
-      sig(600, "EURUSD-1", "buy", "EURUSD", "Croisement haussier MM20/MM50, prix au-dessus de l'EMA200, H4 haussier, ADX 27", "1.08512", "1.08197", "1.09142", "31.5", "63.0", "0.31", "97.65"),
-      mk(540, "trade", "Position ouverte : ACHAT EURUSD 0.31 lot à 1.08515", "Position ouverte : ACHAT EURUSD 0.31 lot à 1.08515", ["sym=EURUSD", "side=buy", "ev=open"]),
+      pre(20, "buy", "GBPUSD", 60),
+      sig(40, "EURUSD-1", "buy", "EURUSD", ["MM20 / MM50 : croisement à la hausse", "Prix au-dessus de l'EMA 200 (tendance haussière)", "Tendance haussière confirmée en H4", "Tendance forte (ADX 27)"], "1.08512", "1.08197", "1.09142", "31.5", "63.0", "0.31", "97.65", "1.08575"),
+      pre(100, "buy", "EURUSD", 60),
       mk(1500, "news", "ANNONCE FORTE dans 30 min : USD - Nonfarm Payrolls", "ANNONCE FORTE dans 30 min : USD - Nonfarm Payrolls\nLe marché peut bouger fort. Évite d'entrer juste avant et vérifie tes stops sur USD.", ["cur=USD", "min=30"]),
       res(3000, "USDJPY-1", "sell", "USDJPY", "tp", 2, "149.682", "149.042", "14|7|5.20|14.00|8.80"),
-      sig(16000, "USDJPY-1", "sell", "USDJPY", "Repli du RSI depuis le surachat, tendance baissière (EMA200, H4 baissier, ADX 31)", "149.682", "150.002", "149.042", "32.0", "64.0", "0.46", "98.90"),
+      sig(16000, "USDJPY-1", "sell", "USDJPY", ["RSI qui redescend du surachat (68) : fin du rebond", "Prix sous l'EMA 200 (tendance baissière)", "Tendance baissière confirmée en H4", "Tendance forte (ADX 31)"], "149.682", "150.002", "149.042", "32.0", "64.0", "0.46", "98.90", "149.618"),
       res(30000, "GBPUSD-1", "buy", "GBPUSD", "sl", -1, "1.27410", "1.27050", "13|6|3.20|12.00|8.80"),
-      sig(52000, "GBPUSD-1", "buy", "GBPUSD", "Croisement haussier MM20/MM50, prix au-dessus de l'EMA200, H4 haussier, ADX 23", "1.27410", "1.27050", "1.28130", "36.0", "72.0", "0.27", "97.20"),
+      sig(52000, "GBPUSD-1", "buy", "GBPUSD", ["MM20 / MM50 : croisement à la hausse", "Prix au-dessus de l'EMA 200 (tendance haussière)", "Tendance haussière confirmée en H4", "Tendance forte (ADX 23)"], "1.27410", "1.27050", "1.28130", "36.0", "72.0", "0.27", "97.20", "1.27482"),
       res(70000, "XAUUSD-1", "buy", "XAUUSD", "tp", 2, "2331.40", "2363.40", "12|6|4.20|12.00|7.80"),
-      sig(98000, "XAUUSD-1", "buy", "XAUUSD", "Rebond du RSI depuis la survente, tendance haussière (EMA200, H4 haussier, ADX 29)", "2331.40", "2315.40", "2363.40", "1600.0", "3200.0", "0.06", "96.00"),
+      sig(98000, "XAUUSD-1", "buy", "XAUUSD", ["RSI qui remonte de la survente (34) : fin du repli", "Prix au-dessus de l'EMA 200 (tendance haussière)", "Tendance haussière confirmée en H4", "Tendance forte (ADX 29)"], "2331.40", "2315.40", "2363.40", "1600.0", "3200.0", "0.06", "96.00", "2334.60"),
       mk(7200, "trade", "Position fermée (Take Profit) : GBPUSD 0.25 lot à 1.27480  Résultat +142.30 EUR", "Position fermée (Take Profit) : GBPUSD 0.25 lot à 1.27480  Résultat +142.30 EUR", ["sym=GBPUSD", "ev=close", "why=Take Profit", "profit=142.30"]),
       mk(9000, "line", "EURUSD : prix monte au-dessus de 1.08400 (ligne ALERTE resistance)", "EURUSD : prix monte au-dessus de 1.08400 (ligne ALERTE resistance)", ["sym=EURUSD"]),
       mk(14000, "account", "Position SANS stop loss : XAUUSD 0.05 lot (ticket 51234). Place un stop.", "Position SANS stop loss : XAUUSD 0.05 lot (ticket 51234). Place un stop.", ["sym=XAUUSD"]),
@@ -952,6 +1027,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
 
   document.addEventListener("visibilitychange", () => { if (!document.hidden && !S.demo && S.code) { poll().catch(() => {}); if (!es) connect(); } });
   setInterval(() => { if (!document.hidden) render(); }, 60000);
+  setInterval(() => { if (!document.hidden) renderPre(); }, 5000);
 
   // ---------- Démarrage ----------
   $("code").value = S.code;

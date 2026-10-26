@@ -1,4 +1,4 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                                  AlertesPro.mq5  |
 //|  Robot d'alertes de trading pour MetaTrader 5                     |
 //|  - Signaux complets : entrée, stop loss, take profit, lot        |
@@ -7,13 +7,14 @@
 //|  - Résumé du marché chaque matin                                 |
 //|  - Lignes de prix, croisement MM, RSI                            |
 //|  - Ouverture / fermeture de positions, drawdown, marge           |
+//|  - Pré-alerte 1 min avant la clôture quand un signal se prépare  |
 //|  - Suivi de chaque signal jusqu'au TP, au SL ou à l'expiration,  |
 //|    avec bilan (taux de réussite, résultat en R)                  |
 //|  Canaux : fenêtre MT5, son, push mobile MT5, e-mail, Telegram    |
 //|  Le robot ne passe AUCUN ordre : il surveille et il prévient.    |
 //+------------------------------------------------------------------+
 #property copyright "AlertesPro"
-#property version   "1.30"
+#property version   "1.40"
 #property description "Signaux avec stop loss / take profit / lot, suivi des résultats, calendrier économique, résumé du matin."
 #property description "Ne passe aucun ordre. Teste d'abord sur un compte démo."
 
@@ -52,6 +53,9 @@ input bool   InpHtfFilter    = true;          // Confirmer la tendance sur une u
 input ENUM_TIMEFRAMES InpHtf = PERIOD_H4;     // Unité de temps supérieure (même EMA de tendance)
 input double InpAdxMin       = 20.0;          // Force de tendance minimale (ADX), 0 = pas de filtre
 input bool   InpOnePerSymbol = true;          // Un seul signal à la fois par marché (attend TP, SL ou expiration)
+input bool   InpPreAlert     = true;          // Pré-alerte juste avant la clôture de la bougie
+input int    InpPreAlertSec  = 60;            // Secondes avant la clôture pour la pré-alerte
+input int    InpValidMin     = 15;            // Minutes pendant lesquelles un signal reste bon à prendre
 
 //--- Suivi des résultats
 input group "3b. Suivi des résultats"
@@ -115,6 +119,7 @@ struct SymState
    int               hAdx;
    datetime          lastBar;
    double            lastRsi;
+   datetime          preBar;   // bougie pour laquelle une pré-alerte est partie
   };
 
 //--- signal suivi jusqu'à sa conclusion
@@ -201,17 +206,22 @@ bool LastValue(const int handle, const int shift, double &value)
    return true;
   }
 
-bool TwoValues(const int handle, double &cur, double &prev)
+bool TwoValuesAt(const int handle, const int shift, double &cur, double &prev)
   {
    if(handle == INVALID_HANDLE)
       return false;
    double b[];
    ArraySetAsSeries(b, true);
-   if(CopyBuffer(handle, 0, 1, 2, b) != 2)
+   if(CopyBuffer(handle, 0, shift, 2, b) != 2)
       return false;
-   cur  = b[0]; // dernière bougie clôturée
+   cur  = b[0]; // bougie analysée
    prev = b[1]; // celle d'avant
    return true;
+  }
+
+bool TwoValues(const int handle, double &cur, double &prev)
+  {
+   return TwoValuesAt(handle, 1, cur, prev); // 1 = dernière bougie clôturée
   }
 
 //--- Évite d'envoyer la même alerte en boucle
@@ -797,26 +807,27 @@ void CatchUpTracks()
 //+------------------------------------------------------------------+
 //| Construction d'un signal complet                                 |
 //+------------------------------------------------------------------+
-void SendSignal(const string sym, const bool buy, const string reason, const double atr)
+//--- reason : une raison par ligne, séparées par "\n- "
+bool SendSignal(const string sym, const bool buy, const string reason, const double atr)
   {
    string tf = TfName(InpTimeframe);
    if(InpOnePerSymbol && InpTrack && HasOpenTrack(sym))
      {
       Print(sym, " : signal ignoré, le précédent signal sur ce marché est toujours en cours.");
-      return;
+      return false;
      }
    if(!CooldownOk(sym + (buy ? "sigB" : "sigS"), (int)MathMax(InpCooldownSec, PeriodSeconds(InpTimeframe))))
-      return;
+      return false;
 
    //--- spread trop large par rapport à la volatilité
    double ask = SymbolInfoDouble(sym, SYMBOL_ASK);
    double bid = SymbolInfoDouble(sym, SYMBOL_BID);
    if(ask <= 0 || bid <= 0)
-      return;
+      return false;
    if(InpMaxSpreadAtr > 0 && (ask - bid) > atr * InpMaxSpreadAtr)
      {
       Print(sym, " : signal ignoré, spread trop large (", Pips(sym, ask - bid), ").");
-      return;
+      return false;
      }
 
    //--- annonce économique proche
@@ -825,48 +836,196 @@ void SendSignal(const string sym, const bool buy, const string reason, const dou
    if(newsNear && InpNewsBlock)
      {
       Print(sym, " : signal ignoré à cause de l'annonce ", news);
-      return;
+      return false;
      }
 
-   double entry = buy ? ask : bid;
+   int    dg    = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
    double dist  = atr * InpAtrMult;
-   double sl    = buy ? entry - dist : entry + dist;
-   double tp    = buy ? entry + dist * InpRR : entry - dist * InpRR;
+   double entry = NormalizeDouble(buy ? ask : bid, dg);
+   double sl    = NormalizeDouble(buy ? entry - dist : entry + dist, dg);
+   double tp    = NormalizeDouble(buy ? entry + dist * InpRR : entry - dist * InpRR, dg);
+   double limit = NormalizeDouble(buy ? entry + dist * 0.2 : entry - dist * 0.2, dg);
 
    double balance   = AccountInfoDouble(ACCOUNT_BALANCE);
    double riskMoney = balance * InpRiskPct / 100.0;
    double realRisk  = 0;
    double lots      = LotForRisk(sym, dist, riskMoney, realRisk);
+   string cur       = AccountInfoString(ACCOUNT_CURRENCY);
+   string lotTxt    = DoubleToString(lots, VolDigits(sym));
+   int    validMin  = (int)MathMax(1, InpValidMin);
+   datetime until   = TimeLocal() + validMin * 60;
 
-   string msg = "SIGNAL " + (buy ? "ACHAT " : "VENTE ") + sym + " " + tf + "\n" +
-                reason + "\n" +
-                "Entrée " + Px(sym, entry) + "\n" +
-                "SL " + Px(sym, sl) + " (" + Pips(sym, dist) + ")\n" +
-                "TP " + Px(sym, tp) + " (" + Pips(sym, dist * InpRR) + ")\n";
+   //--- 3 premières lignes : l'essentiel (visible dans une notification)
+   string msg = (buy ? "🟢 ACHAT " : "🔴 VENTE ") + sym + " MAINTENANT (" + tf + ")\n";
+   msg += "Entrée " + Px(sym, entry) + " | SL " + Px(sym, sl) + " | TP " + Px(sym, tp);
    if(lots > 0)
-      msg += "Lot " + DoubleToString(lots, VolDigits(sym)) + " = risque " +
-             DoubleToString(realRisk, 2) + " " + AccountInfoString(ACCOUNT_CURRENCY) +
-             " (" + DoubleToString(InpRiskPct, 1) + " %)";
+      msg += " | Lot " + lotTxt;
+   msg += "\nÀ prendre avant " + TimeToString(until, TIME_MINUTES) + "\n\n";
+
+   if(lots > 0)
+     {
+      msg += "👉 QUOI FAIRE DANS MT5\n";
+      msg += "1. Cotations > " + sym + " > Nouvel ordre\n";
+      msg += "2. Exécution au marché, volume " + lotTxt + "\n";
+      msg += "3. Stop Loss : " + Px(sym, sl) + "\n";
+      msg += "4. Take Profit : " + Px(sym, tp) + "\n";
+      msg += "5. Touche " + (buy ? "ACHETER (Buy)" : "VENDRE (Sell)") + "\n\n";
+      msg += "💰 CE QUE TU RISQUES\n";
+      msg += "Stop Loss touché : -" + DoubleToString(realRisk, 2) + " " + cur + " (" + DoubleToString(InpRiskPct, 1) + " % du compte)\n";
+      msg += "Take Profit touché : +" + DoubleToString(realRisk * InpRR, 2) + " " + cur + " (" + DoubleToString(InpRR, 1) + " fois le risque)\n\n";
+     }
    else
-      msg += "Lot minimum trop gros pour " + DoubleToString(InpRiskPct, 1) + " % de risque : passe ton tour.";
+      msg += "⛔ NE PRENDS PAS CE TRADE : même le lot minimum risquerait plus de " +
+             DoubleToString(InpRiskPct, 1) + " % de ton compte.\n\n";
+
+   msg += "📍 LES PRIX\n";
+   msg += "Entrée : " + Px(sym, entry) + " (prix actuel)\n";
+   msg += "Stop Loss : " + Px(sym, sl) + " (" + Pips(sym, dist) + (buy ? " plus bas" : " plus haut") + ")\n";
+   msg += "Take Profit : " + Px(sym, tp) + " (" + Pips(sym, dist * InpRR) + (buy ? " plus haut" : " plus bas") + ")\n\n";
+   msg += "❓ POURQUOI\n- " + reason + "\n\n";
+   msg += "⚠️ " + (buy ? "N'achète pas si le prix est déjà au-dessus de " : "Ne vends pas si le prix est déjà en dessous de ") +
+          Px(sym, limit) + " : le signal est passé.\n";
+   msg += "Ne déplace jamais ton Stop Loss.";
    if(newsNear)
       msg += "\nAttention annonce : " + news;
 
-   int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
-   entry = NormalizeDouble(entry, dg);
-   sl    = NormalizeDouble(sl, dg);
-   tp    = NormalizeDouble(tp, dg);
    string sid = sym + "-" + IntegerToString((long)iTime(sym, InpTimeframe, 0));
    if(InpTrack)
-      msg += "\nSuivi : je te préviens au TP, au SL, ou après " + IntegerToString(InpExpireBars) + " bougies.";
+      msg += "\nJe te préviens quand le TP ou le SL est touché.";
+
+   //--- données pour l'appli (pas de virgule dans les valeurs)
+   string rs = reason;
+   StringReplace(rs, "\n- ", " · ");
+   StringReplace(rs, ",", ";");
    string tags = "sid=" + sid + ",exp=" + IntegerToString(InpExpireBars) + ",sym=" + sym + ",side=" + (buy ? "buy" : "sell") + ",tf=" + tf +
                  ",entry=" + DoubleToString(entry, dg) + ",sl=" + DoubleToString(sl, dg) +
-                 ",tp=" + DoubleToString(tp, dg) + ",slp=" + DoubleToString(dist / PipSize(sym), 1) +
+                 ",tp=" + DoubleToString(tp, dg) + ",lim=" + DoubleToString(limit, dg) +
+                 ",slp=" + DoubleToString(dist / PipSize(sym), 1) +
                  ",tpp=" + DoubleToString(dist * InpRR / PipSize(sym), 1) +
                  ",lot=" + DoubleToString(lots, VolDigits(sym)) + ",risk=" + DoubleToString(realRisk, 2) +
-                 ",cur=" + AccountInfoString(ACCOUNT_CURRENCY) + ",rr=" + DoubleToString(InpRR, 1);
+                 ",cur=" + cur + ",rr=" + DoubleToString(InpRR, 1) +
+                 ",vu=" + IntegerToString((long)(TimeGMT() + validMin * 60)) + ",rs=" + rs;
    Notify(msg, "signal", tags);
    AddTrack(sid, sym, buy, entry, sl, tp);
+   return true;
+  }
+
+//+------------------------------------------------------------------+
+//| Conditions d'un signal sur la bougie "shift"                     |
+//| (1 = dernière bougie clôturée, 0 = bougie en cours de formation) |
+//+------------------------------------------------------------------+
+bool EvalSignal(SymState &st, const int shift, bool &buy, string &reason, double &atr)
+  {
+   if(!InpSignals)
+      return false;
+   double close = iClose(st.name, InpTimeframe, shift);
+   double rsi = 0, rsiPrev = 0, fast = 0, fastPrev = 0, slow = 0, slowPrev = 0, trend = 0;
+   bool hasRsi = TwoValuesAt(st.hRsi, shift, rsi, rsiPrev);
+   bool hasMa  = TwoValuesAt(st.hFast, shift, fast, fastPrev) && TwoValuesAt(st.hSlow, shift, slow, slowPrev);
+   if(!LastValue(st.hTrend, shift, trend) || !LastValue(st.hAtr, shift, atr) || atr <= 0 || close <= 0)
+      return false;
+
+   bool crossUp   = hasMa && fastPrev <= slowPrev && fast > slow;
+   bool crossDn   = hasMa && fastPrev >= slowPrev && fast < slow;
+   bool upTrend   = close > trend;
+   bool downTrend = close < trend;
+   string mm  = "MM" + IntegerToString(InpMaFast) + " / MM" + IntegerToString(InpMaSlow);
+   string ema = "EMA " + IntegerToString(InpTrendPeriod);
+
+   //--- confirmation sur l'unité de temps supérieure (bougie terminée)
+   string extra = "";
+   if(InpHtfFilter)
+     {
+      double htfEma = 0;
+      double htfClose = iClose(st.name, InpHtf, 1);
+      if(!LastValue(st.hHtf, 1, htfEma) || htfClose <= 0)
+         return false; // données pas encore prêtes
+      bool htfUp = htfClose > htfEma;
+      upTrend   = upTrend && htfUp;
+      downTrend = downTrend && !htfUp;
+      extra += "\n- Tendance " + (htfUp ? "haussière" : "baissière") + " confirmée en " + TfName(InpHtf);
+     }
+
+   //--- force de la tendance
+   if(InpAdxMin > 0)
+     {
+      double adx = 0;
+      if(!LastValue(st.hAdx, shift, adx) || adx < InpAdxMin)
+         return false;
+      extra += "\n- Tendance forte (ADX " + DoubleToString(adx, 0) + ")";
+     }
+
+   if(InpSigCross && crossUp && upTrend && (!hasRsi || rsi < InpRsiHigh))
+     {
+      buy = true;
+      reason = mm + " : croisement à la hausse\n- Prix au-dessus de l'" + ema + " (tendance haussière)" + extra;
+      return true;
+     }
+   if(InpSigCross && crossDn && downTrend && (!hasRsi || rsi > InpRsiLow))
+     {
+      buy = false;
+      reason = mm + " : croisement à la baisse\n- Prix sous l'" + ema + " (tendance baissière)" + extra;
+      return true;
+     }
+   if(InpSigPullback && hasRsi && upTrend && rsiPrev <= InpRsiLow && rsi > InpRsiLow)
+     {
+      buy = true;
+      reason = "RSI qui remonte de la survente (" + DoubleToString(rsi, 0) + ") : fin du repli\n- Prix au-dessus de l'" + ema + " (tendance haussière)" + extra;
+      return true;
+     }
+   if(InpSigPullback && hasRsi && downTrend && rsiPrev >= InpRsiHigh && rsi < InpRsiHigh)
+     {
+      buy = false;
+      reason = "RSI qui redescend du surachat (" + DoubleToString(rsi, 0) + ") : fin du rebond\n- Prix sous l'" + ema + " (tendance baissière)" + extra;
+      return true;
+     }
+   return false;
+  }
+
+//+------------------------------------------------------------------+
+//| Pré-alerte : prévient juste avant la clôture si un signal se     |
+//| prépare, pour avoir le temps d'ouvrir MT5                        |
+//+------------------------------------------------------------------+
+string SecondsText(const int sec)
+  {
+   if(sec >= 90)
+      return IntegerToString((sec + 30) / 60) + " min";
+   if(sec >= 50)
+      return "1 min";
+   return IntegerToString(sec) + " s";
+  }
+
+void CheckPreAlert(SymState &st)
+  {
+   if(!InpPreAlert || !InpSignals || st.lastBar == 0 || MQLInfoInteger(MQL_TESTER))
+      return;
+   datetime bar = iTime(st.name, InpTimeframe, 0);
+   if(bar == 0 || bar == st.preBar)
+      return;
+   int left = (int)(bar + PeriodSeconds(InpTimeframe) - TimeTradeServer());
+   if(left > InpPreAlertSec || left < 5)
+      return;
+   if(InpOnePerSymbol && InpTrack && HasOpenTrack(st.name))
+      return;
+   bool buy = false;
+   string reason = "";
+   double atr = 0;
+   if(!EvalSignal(st, 0, buy, reason, atr))
+      return;
+   string news;
+   if(InpNewsBlock && NewsNear(st.name, InpNewsWindow, news))
+      return;
+
+   st.preBar = bar;
+   datetime closeAt = TimeLocal() + left;
+   string side = buy ? "ACHAT" : "VENTE";
+   string msg = "⏳ PRÉPARE-TOI : " + side + " " + st.name + " possible à " + TimeToString(closeAt, TIME_MINUTES) +
+                " (dans " + SecondsText(left) + ")\n" +
+                "Ouvre MT5 sur " + st.name + " maintenant.\n" +
+                "Je confirme à la clôture de la bougie avec l'entrée, le Stop Loss, le Take Profit et le lot.\n" +
+                "N'entre pas avant la confirmation : le signal peut encore s'annuler.";
+   Notify(msg, "pre", "sym=" + st.name + ",side=" + (buy ? "buy" : "sell") + ",ev=pre,at=" +
+          IntegerToString((long)(TimeGMT() + left)) + ",tf=" + TfName(InpTimeframe));
   }
 
 //+------------------------------------------------------------------+
@@ -893,61 +1052,24 @@ void CheckSymbol(SymState &st)
    bool crossUp = hasMa && fastPrev <= slowPrev && fast > slow;
    bool crossDn = hasMa && fastPrev >= slowPrev && fast < slow;
 
-   double trend = 0, atr = 0;
-   bool hasTrend = LastValue(st.hTrend, 1, trend);
-   bool hasAtr   = LastValue(st.hAtr, 1, atr);
-
    if(first)
       return; // première lecture : on mémorise sans alerter
 
-   //--- signaux complets
-   if(InpSignals && hasTrend && hasAtr && atr > 0 && close > 0)
+   //--- signal complet sur la bougie qui vient de se clôturer
+   bool sent = false;
+   bool sigBuy = false;
+   string sigReason = "";
+   double sigAtr = 0;
+   if(EvalSignal(st, 1, sigBuy, sigReason, sigAtr))
+      sent = SendSignal(st.name, sigBuy, sigReason, sigAtr);
+
+   //--- une pré-alerte était partie pour cette bougie mais pas de signal : on annule
+   if(st.preBar != 0)
      {
-      bool upTrend   = close > trend;
-      bool downTrend = close < trend;
-      string mm = "MM" + IntegerToString(InpMaFast) + "/MM" + IntegerToString(InpMaSlow);
-      string ema = "EMA" + IntegerToString(InpTrendPeriod);
-
-      //--- confirmation sur l'unité de temps supérieure (bougie terminée)
-      string extra = "";
-      if(InpHtfFilter)
-        {
-         double htfEma = 0;
-         double htfClose = iClose(st.name, InpHtf, 1);
-         if(!LastValue(st.hHtf, 1, htfEma) || htfClose <= 0)
-           {
-            upTrend = false;   // données pas encore prêtes : pas de signal
-            downTrend = false;
-           }
-         else
-           {
-            bool htfUp = htfClose > htfEma;
-            upTrend   = upTrend && htfUp;
-            downTrend = downTrend && !htfUp;
-            extra += ", " + TfName(InpHtf) + (htfUp ? " haussier" : " baissier");
-           }
-        }
-
-      //--- force de la tendance
-      if(InpAdxMin > 0)
-        {
-         double adx = 0;
-         if(!LastValue(st.hAdx, 1, adx) || adx < InpAdxMin)
-           {
-            upTrend = false;
-            downTrend = false;
-           }
-         extra += ", ADX " + DoubleToString(adx, 0);
-        }
-
-      if(InpSigCross && crossUp && upTrend && (!hasRsi || rsi < InpRsiHigh))
-         SendSignal(st.name, true, "Croisement haussier " + mm + ", prix au-dessus de l'" + ema + extra, atr);
-      else if(InpSigCross && crossDn && downTrend && (!hasRsi || rsi > InpRsiLow))
-         SendSignal(st.name, false, "Croisement baissier " + mm + ", prix sous l'" + ema + extra, atr);
-      else if(InpSigPullback && hasRsi && upTrend && rsiPrev <= InpRsiLow && rsi > InpRsiLow)
-         SendSignal(st.name, true, "Rebond du RSI depuis la survente, tendance haussière (" + ema + extra + ")", atr);
-      else if(InpSigPullback && hasRsi && downTrend && rsiPrev >= InpRsiHigh && rsi < InpRsiHigh)
-         SendSignal(st.name, false, "Repli du RSI depuis le surachat, tendance baissière (" + ema + extra + ")", atr);
+      if(st.preBar == iTime(st.name, InpTimeframe, 1) && !sent)
+         Notify("✖ PRÉ-ALERTE ANNULÉE : " + st.name + "\nÀ la clôture de la bougie, les conditions ne sont plus réunies. Ne fais rien.",
+                "pre", "sym=" + st.name + ",ev=cancel");
+      st.preBar = 0;
      }
 
    //--- alertes simples
@@ -1307,6 +1429,7 @@ int OnInit()
       g_syms[k].name    = sym;
       g_syms[k].lastBar = 0;
       g_syms[k].lastRsi = 0;
+      g_syms[k].preBar  = 0;
       g_syms[k].hFast   = iMA(sym, InpTimeframe, InpMaFast, 0, InpMaMethod, PRICE_CLOSE);
       g_syms[k].hSlow   = iMA(sym, InpTimeframe, InpMaSlow, 0, InpMaMethod, PRICE_CLOSE);
       g_syms[k].hRsi    = iRSI(sym, InpTimeframe, InpRsiPeriod, PRICE_CLOSE);
@@ -1392,7 +1515,10 @@ void OnTimer()
    if(InpTrack)
       CheckTracks();
    for(int i = 0; i < ArraySize(g_syms); i++)
+     {
       CheckSymbol(g_syms[i]);
+      CheckPreAlert(g_syms[i]);
+     }
    CheckAccount();
    CheckNews();
    CheckSummary();
