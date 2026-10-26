@@ -7,12 +7,14 @@
 //|  - Résumé du marché chaque matin                                 |
 //|  - Lignes de prix, croisement MM, RSI                            |
 //|  - Ouverture / fermeture de positions, drawdown, marge           |
+//|  - Suivi de chaque signal jusqu'au TP, au SL ou à l'expiration,  |
+//|    avec bilan (taux de réussite, résultat en R)                  |
 //|  Canaux : fenêtre MT5, son, push mobile MT5, e-mail, Telegram    |
 //|  Le robot ne passe AUCUN ordre : il surveille et il prévient.    |
 //+------------------------------------------------------------------+
 #property copyright "AlertesPro"
-#property version   "1.20"
-#property description "Signaux avec stop loss / take profit / lot, calendrier économique, résumé du matin."
+#property version   "1.30"
+#property description "Signaux avec stop loss / take profit / lot, suivi des résultats, calendrier économique, résumé du matin."
 #property description "Ne passe aucun ordre. Teste d'abord sur un compte démo."
 
 //--- Canaux d'envoi
@@ -46,6 +48,16 @@ input double InpAtrMult      = 1.5;           // Stop loss = ATR x ce nombre
 input double InpRR           = 2.0;           // Take profit = stop x ce nombre (ratio gain/risque)
 input double InpRiskPct      = 1.0;           // Risque par trade en % du solde
 input double InpMaxSpreadAtr = 0.25;          // Pas de signal si spread > ATR x ce nombre
+input bool   InpHtfFilter    = true;          // Confirmer la tendance sur une unité de temps supérieure
+input ENUM_TIMEFRAMES InpHtf = PERIOD_H4;     // Unité de temps supérieure (même EMA de tendance)
+input double InpAdxMin       = 20.0;          // Force de tendance minimale (ADX), 0 = pas de filtre
+input bool   InpOnePerSymbol = true;          // Un seul signal à la fois par marché (attend TP, SL ou expiration)
+
+//--- Suivi des résultats
+input group "3b. Suivi des résultats"
+input bool   InpTrack        = true;          // Suivre chaque signal jusqu'au TP, au SL ou à l'expiration
+input int    InpExpireBars   = 48;            // Expiration d'un signal non résolu (en bougies)
+input bool   InpResultAlerts = true;          // Prévenir quand un signal touche son TP ou son SL
 
 //--- Calendrier économique
 input group "4. Annonces économiques"
@@ -99,11 +111,32 @@ struct SymState
    int               hRsi;
    int               hTrend;
    int               hAtr;
+   int               hHtf;
+   int               hAdx;
    datetime          lastBar;
    double            lastRsi;
   };
 
+//--- signal suivi jusqu'à sa conclusion
+struct Track
+  {
+   string            sid;
+   string            sym;
+   bool              buy;
+   double            entry;
+   double            sl;
+   double            tp;
+   datetime          opened;
+  };
+
 SymState g_syms[];
+Track    g_tracks[];
+int      g_statN      = 0;     // signaux terminés
+int      g_statWins   = 0;     // gagnants (R > 0)
+double   g_statR      = 0.0;   // somme des R
+double   g_statGrossW = 0.0;   // somme des R gagnants
+double   g_statGrossL = 0.0;   // somme des R perdants (valeur positive)
+const string JOURNAL_FILE = "AlertesPro_journal.csv";
 string   g_coolKeys[];
 datetime g_coolTimes[];
 string   g_history[];
@@ -328,7 +361,15 @@ void SendStatus()
                  ",ml=" + DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN) > 0 ? AccountInfoDouble(ACCOUNT_MARGIN_LEVEL) : 0, 0) +
                  ",pos=" + IntegerToString(PositionsTotal()) +
                  ",tf=" + TfName(InpTimeframe) +
-                 ",risk=" + DoubleToString(InpRiskPct, 1);
+                 ",risk=" + DoubleToString(InpRiskPct, 1) +
+                 "," + StatsTag();
+   for(int i = 0; i < ArraySize(g_tracks) && i < 10; i++)
+     {
+      int dg = (int)SymbolInfoInteger(g_tracks[i].sym, SYMBOL_DIGITS);
+      tags += ",o=" + g_tracks[i].sid + "|" + g_tracks[i].sym + "|" + (g_tracks[i].buy ? "buy" : "sell") + "|" +
+              DoubleToString(g_tracks[i].entry, dg) + "|" + DoubleToString(g_tracks[i].sl, dg) + "|" +
+              DoubleToString(g_tracks[i].tp, dg);
+     }
    for(int i = 0; i < ArraySize(g_syms); i++)
      {
       string sym = g_syms[i].name;
@@ -544,11 +585,226 @@ double LotForRisk(const string sym, const double dist, const double riskMoney, d
   }
 
 //+------------------------------------------------------------------+
+//| Suivi des résultats des signaux                                  |
+//+------------------------------------------------------------------+
+bool HasOpenTrack(const string sym)
+  {
+   for(int i = 0; i < ArraySize(g_tracks); i++)
+      if(g_tracks[i].sym == sym)
+         return true;
+   return false;
+  }
+
+string StatsTag()
+  {
+   return "st=" + IntegerToString(g_statN) + "|" + IntegerToString(g_statWins) + "|" +
+          DoubleToString(g_statR, 2) + "|" + DoubleToString(g_statGrossW, 2) + "|" +
+          DoubleToString(g_statGrossL, 2);
+  }
+
+string StatsText()
+  {
+   if(g_statN == 0)
+      return "Bilan des signaux : aucun signal terminé pour l'instant.";
+   return "Bilan des signaux : " + IntegerToString(g_statN) + " terminés, " +
+          DoubleToString(100.0 * g_statWins / g_statN, 0) + " % gagnants, " +
+          (g_statR >= 0 ? "+" : "") + DoubleToString(g_statR, 1) + " R au total.";
+  }
+
+//--- sauvegarde : une ligne de statistiques puis une ligne par signal ouvert
+void SaveJournal()
+  {
+   if(MQLInfoInteger(MQL_TESTER))
+      return;
+   int h = FileOpen(JOURNAL_FILE, FILE_WRITE | FILE_TXT | FILE_ANSI);
+   if(h == INVALID_HANDLE)
+     {
+      Print("Journal : écriture impossible (", GetLastError(), ").");
+      return;
+     }
+   FileWriteString(h, "STATS;" + IntegerToString(g_statN) + ";" + IntegerToString(g_statWins) + ";" +
+                   DoubleToString(g_statR, 4) + ";" + DoubleToString(g_statGrossW, 4) + ";" +
+                   DoubleToString(g_statGrossL, 4) + "\r\n");
+   for(int i = 0; i < ArraySize(g_tracks); i++)
+     {
+      int dg = (int)SymbolInfoInteger(g_tracks[i].sym, SYMBOL_DIGITS);
+      FileWriteString(h, "OPEN;" + g_tracks[i].sid + ";" + g_tracks[i].sym + ";" +
+                      (g_tracks[i].buy ? "buy" : "sell") + ";" +
+                      DoubleToString(g_tracks[i].entry, dg) + ";" + DoubleToString(g_tracks[i].sl, dg) + ";" +
+                      DoubleToString(g_tracks[i].tp, dg) + ";" + IntegerToString((long)g_tracks[i].opened) + "\r\n");
+     }
+   FileClose(h);
+  }
+
+void LoadJournal()
+  {
+   ArrayResize(g_tracks, 0);
+   if(MQLInfoInteger(MQL_TESTER) || !FileIsExist(JOURNAL_FILE))
+      return;
+   int h = FileOpen(JOURNAL_FILE, FILE_READ | FILE_TXT | FILE_ANSI);
+   if(h == INVALID_HANDLE)
+      return;
+   while(!FileIsEnding(h))
+     {
+      string line = FileReadString(h);
+      string f[];
+      int n = StringSplit(line, ';', f);
+      if(n >= 6 && f[0] == "STATS")
+        {
+         g_statN      = (int)StringToInteger(f[1]);
+         g_statWins   = (int)StringToInteger(f[2]);
+         g_statR      = StringToDouble(f[3]);
+         g_statGrossW = StringToDouble(f[4]);
+         g_statGrossL = StringToDouble(f[5]);
+        }
+      else if(n >= 8 && f[0] == "OPEN")
+        {
+         int k = ArraySize(g_tracks);
+         ArrayResize(g_tracks, k + 1);
+         g_tracks[k].sid    = f[1];
+         g_tracks[k].sym    = f[2];
+         g_tracks[k].buy    = (f[3] == "buy");
+         g_tracks[k].entry  = StringToDouble(f[4]);
+         g_tracks[k].sl     = StringToDouble(f[5]);
+         g_tracks[k].tp     = StringToDouble(f[6]);
+         g_tracks[k].opened = (datetime)StringToInteger(f[7]);
+        }
+     }
+   FileClose(h);
+  }
+
+void AddTrack(const string sid, const string sym, const bool buy, const double entry, const double sl, const double tp)
+  {
+   if(!InpTrack)
+      return;
+   int k = ArraySize(g_tracks);
+   ArrayResize(g_tracks, k + 1);
+   g_tracks[k].sid    = sid;
+   g_tracks[k].sym    = sym;
+   g_tracks[k].buy    = buy;
+   g_tracks[k].entry  = entry;
+   g_tracks[k].sl     = sl;
+   g_tracks[k].tp     = tp;
+   g_tracks[k].opened = TimeCurrent();
+   SaveJournal();
+  }
+
+//--- clôture d'un signal : statistiques, message, retrait de la liste
+void CloseTrack(const int idx, const string res, const double exitPx)
+  {
+   Track t = g_tracks[idx];
+   double risk = MathAbs(t.entry - t.sl);
+   double r = 0;
+   if(risk > 0)
+      r = (t.buy ? exitPx - t.entry : t.entry - exitPx) / risk;
+   g_statN++;
+   g_statR += r;
+   if(r > 0)
+     {
+      g_statWins++;
+      g_statGrossW += r;
+     }
+   else
+      g_statGrossL += -r;
+
+   int n = ArraySize(g_tracks);
+   for(int i = idx; i < n - 1; i++)
+      g_tracks[i] = g_tracks[i + 1];
+   ArrayResize(g_tracks, n - 1);
+   SaveJournal();
+
+   string what = (res == "tp") ? "TAKE PROFIT TOUCHÉ" : (res == "sl") ? "STOP LOSS TOUCHÉ" : "SIGNAL EXPIRÉ";
+   string side = t.buy ? "ACHAT " : "VENTE ";
+   string msg = what + " : " + side + t.sym + "\n" +
+                "Entrée " + Px(t.sym, t.entry) + " -> sortie " + Px(t.sym, exitPx) + "\n" +
+                "Résultat " + (r >= 0 ? "+" : "") + DoubleToString(r, 2) + " R\n" + StatsText();
+   string tags = "sid=" + t.sid + ",sym=" + t.sym + ",side=" + (t.buy ? "buy" : "sell") + ",res=" + res +
+                 ",r=" + DoubleToString(r, 2) + ",exit=" + Px(t.sym, exitPx) + "," + StatsTag();
+   if(InpResultAlerts)
+      Notify(msg, "result", tags);
+   else
+      Print(msg);
+  }
+
+//--- un signal a-t-il touché son SL ou son TP pendant que MT5 était fermé ?
+bool ResolveFromHistory(const Track &t, string &res, double &exitPx)
+  {
+   MqlRates rates[];
+   int n = CopyRates(t.sym, PERIOD_M1, t.opened, TimeCurrent(), rates);
+   if(n <= 0)
+      return false;
+   double point = SymbolInfoDouble(t.sym, SYMBOL_POINT);
+   for(int i = 0; i < n; i++)
+     {
+      double spread = rates[i].spread * point;
+      if(t.buy)
+        {
+         if(rates[i].low <= t.sl)  { res = "sl"; exitPx = t.sl; return true; }
+         if(rates[i].high >= t.tp) { res = "tp"; exitPx = t.tp; return true; }
+        }
+      else
+        {
+         if(rates[i].high + spread >= t.sl) { res = "sl"; exitPx = t.sl; return true; }
+         if(rates[i].low + spread <= t.tp)  { res = "tp"; exitPx = t.tp; return true; }
+        }
+     }
+   return false;
+  }
+
+void CheckTracks()
+  {
+   static datetime last = 0;
+   if(!MQLInfoInteger(MQL_TESTER) && TimeLocal() - last < 2)
+      return;
+   last = TimeLocal();
+   int life = (int)MathMax(1, InpExpireBars) * PeriodSeconds(InpTimeframe);
+   for(int i = ArraySize(g_tracks) - 1; i >= 0; i--)
+     {
+      string sym = g_tracks[i].sym;
+      double bid = SymbolInfoDouble(sym, SYMBOL_BID);
+      double ask = SymbolInfoDouble(sym, SYMBOL_ASK);
+      if(bid <= 0 || ask <= 0)
+         continue;
+      bool buy = g_tracks[i].buy;
+      double sl = g_tracks[i].sl, tp = g_tracks[i].tp;
+      if(buy && bid <= sl)
+         CloseTrack(i, "sl", sl);
+      else if(buy && bid >= tp)
+         CloseTrack(i, "tp", tp);
+      else if(!buy && ask >= sl)
+         CloseTrack(i, "sl", sl);
+      else if(!buy && ask <= tp)
+         CloseTrack(i, "tp", tp);
+      else if(TimeCurrent() - g_tracks[i].opened >= life)
+         CloseTrack(i, "exp", buy ? bid : ask);
+     }
+  }
+
+//--- au démarrage : rattrape les TP / SL touchés pendant une coupure
+void CatchUpTracks()
+  {
+   for(int i = ArraySize(g_tracks) - 1; i >= 0; i--)
+     {
+      string res;
+      double exitPx;
+      if(!SymbolSelect(g_tracks[i].sym, true))
+         continue;
+      if(ResolveFromHistory(g_tracks[i], res, exitPx))
+         CloseTrack(i, res, exitPx);
+     }
+  }
+
+//+------------------------------------------------------------------+
 //| Construction d'un signal complet                                 |
 //+------------------------------------------------------------------+
 void SendSignal(const string sym, const bool buy, const string reason, const double atr)
   {
    string tf = TfName(InpTimeframe);
+   if(InpOnePerSymbol && InpTrack && HasOpenTrack(sym))
+     {
+      Print(sym, " : signal ignoré, le précédent signal sur ce marché est toujours en cours.");
+      return;
+     }
    if(!CooldownOk(sym + (buy ? "sigB" : "sigS"), (int)MathMax(InpCooldownSec, PeriodSeconds(InpTimeframe))))
       return;
 
@@ -597,13 +853,20 @@ void SendSignal(const string sym, const bool buy, const string reason, const dou
       msg += "\nAttention annonce : " + news;
 
    int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
-   string tags = "sym=" + sym + ",side=" + (buy ? "buy" : "sell") + ",tf=" + tf +
+   entry = NormalizeDouble(entry, dg);
+   sl    = NormalizeDouble(sl, dg);
+   tp    = NormalizeDouble(tp, dg);
+   string sid = sym + "-" + IntegerToString((long)iTime(sym, InpTimeframe, 0));
+   if(InpTrack)
+      msg += "\nSuivi : je te préviens au TP, au SL, ou après " + IntegerToString(InpExpireBars) + " bougies.";
+   string tags = "sid=" + sid + ",exp=" + IntegerToString(InpExpireBars) + ",sym=" + sym + ",side=" + (buy ? "buy" : "sell") + ",tf=" + tf +
                  ",entry=" + DoubleToString(entry, dg) + ",sl=" + DoubleToString(sl, dg) +
                  ",tp=" + DoubleToString(tp, dg) + ",slp=" + DoubleToString(dist / PipSize(sym), 1) +
                  ",tpp=" + DoubleToString(dist * InpRR / PipSize(sym), 1) +
                  ",lot=" + DoubleToString(lots, VolDigits(sym)) + ",risk=" + DoubleToString(realRisk, 2) +
                  ",cur=" + AccountInfoString(ACCOUNT_CURRENCY) + ",rr=" + DoubleToString(InpRR, 1);
    Notify(msg, "signal", tags);
+   AddTrack(sid, sym, buy, entry, sl, tp);
   }
 
 //+------------------------------------------------------------------+
@@ -645,14 +908,46 @@ void CheckSymbol(SymState &st)
       string mm = "MM" + IntegerToString(InpMaFast) + "/MM" + IntegerToString(InpMaSlow);
       string ema = "EMA" + IntegerToString(InpTrendPeriod);
 
+      //--- confirmation sur l'unité de temps supérieure (bougie terminée)
+      string extra = "";
+      if(InpHtfFilter)
+        {
+         double htfEma = 0;
+         double htfClose = iClose(st.name, InpHtf, 1);
+         if(!LastValue(st.hHtf, 1, htfEma) || htfClose <= 0)
+           {
+            upTrend = false;   // données pas encore prêtes : pas de signal
+            downTrend = false;
+           }
+         else
+           {
+            bool htfUp = htfClose > htfEma;
+            upTrend   = upTrend && htfUp;
+            downTrend = downTrend && !htfUp;
+            extra += ", " + TfName(InpHtf) + (htfUp ? " haussier" : " baissier");
+           }
+        }
+
+      //--- force de la tendance
+      if(InpAdxMin > 0)
+        {
+         double adx = 0;
+         if(!LastValue(st.hAdx, 1, adx) || adx < InpAdxMin)
+           {
+            upTrend = false;
+            downTrend = false;
+           }
+         extra += ", ADX " + DoubleToString(adx, 0);
+        }
+
       if(InpSigCross && crossUp && upTrend && (!hasRsi || rsi < InpRsiHigh))
-         SendSignal(st.name, true, "Croisement haussier " + mm + ", prix au-dessus de l'" + ema, atr);
+         SendSignal(st.name, true, "Croisement haussier " + mm + ", prix au-dessus de l'" + ema + extra, atr);
       else if(InpSigCross && crossDn && downTrend && (!hasRsi || rsi > InpRsiLow))
-         SendSignal(st.name, false, "Croisement baissier " + mm + ", prix sous l'" + ema, atr);
+         SendSignal(st.name, false, "Croisement baissier " + mm + ", prix sous l'" + ema + extra, atr);
       else if(InpSigPullback && hasRsi && upTrend && rsiPrev <= InpRsiLow && rsi > InpRsiLow)
-         SendSignal(st.name, true, "Rebond du RSI depuis la survente, tendance haussière (" + ema + ")", atr);
+         SendSignal(st.name, true, "Rebond du RSI depuis la survente, tendance haussière (" + ema + extra + ")", atr);
       else if(InpSigPullback && hasRsi && downTrend && rsiPrev >= InpRsiHigh && rsi < InpRsiHigh)
-         SendSignal(st.name, false, "Repli du RSI depuis le surachat, tendance baissière (" + ema + ")", atr);
+         SendSignal(st.name, false, "Repli du RSI depuis le surachat, tendance baissière (" + ema + extra + ")", atr);
      }
 
    //--- alertes simples
@@ -728,6 +1023,8 @@ void SendSummary()
       else
          msg += "Annonces fortes (24 h) : " + IntegerToString(count) + "\n" + list;
      }
+   if(InpTrack)
+      msg += "\n" + StatsText();
    Notify(msg, "summary");
   }
 
@@ -775,6 +1072,8 @@ void UpdatePanel()
      }
    if(InpLineAlerts)
       s += "Lignes actives : " + IntegerToString(CountActiveLines()) + "\n";
+   if(InpTrack)
+      s += StatsText() + "  Signaux en cours : " + IntegerToString(ArraySize(g_tracks)) + "\n";
    s += "Dernières alertes :\n";
    if(ArraySize(g_history) == 0)
       s += "  (aucune)\n";
@@ -1013,6 +1312,8 @@ int OnInit()
       g_syms[k].hRsi    = iRSI(sym, InpTimeframe, InpRsiPeriod, PRICE_CLOSE);
       g_syms[k].hTrend  = iMA(sym, InpTimeframe, InpTrendPeriod, 0, MODE_EMA, PRICE_CLOSE);
       g_syms[k].hAtr    = iATR(sym, InpTimeframe, InpAtrPeriod);
+      g_syms[k].hHtf    = InpHtfFilter ? iMA(sym, InpHtf, InpTrendPeriod, 0, MODE_EMA, PRICE_CLOSE) : INVALID_HANDLE;
+      g_syms[k].hAdx    = InpAdxMin > 0 ? iADX(sym, InpTimeframe, 14) : INVALID_HANDLE;
      }
 
    if(ArraySize(g_syms) == 0)
@@ -1026,10 +1327,20 @@ int OnInit()
    EventSetTimer(1);
    UpdatePanel();
 
+   //--- reprend les signaux en cours (journal sauvegardé)
+   g_statN = 0; g_statWins = 0; g_statR = 0; g_statGrossW = 0; g_statGrossL = 0;
+   if(InpTrack)
+      LoadJournal();
+
    if(InpTestAtStart && !MQLInfoInteger(MQL_TESTER))
       Notify("AlertesPro démarré : " + IntegerToString(ArraySize(g_syms)) + " marché(s), " +
              TfName(InpTimeframe) + ", risque " + DoubleToString(InpRiskPct, 1) +
-             " % par trade. Les alertes arriveront ici.");
+             " % par trade. Les alertes arriveront ici." +
+             (InpTrack ? "\n" + StatsText() + " En cours : " + IntegerToString(ArraySize(g_tracks)) + "." : ""));
+
+   //--- rattrape les signaux conclus pendant que MT5 était fermé
+   if(InpTrack)
+      CatchUpTracks();
    return INIT_SUCCEEDED;
   }
 
@@ -1043,6 +1354,18 @@ void OnDeinit(const int reason)
       if(g_syms[i].hRsi   != INVALID_HANDLE) IndicatorRelease(g_syms[i].hRsi);
       if(g_syms[i].hTrend != INVALID_HANDLE) IndicatorRelease(g_syms[i].hTrend);
       if(g_syms[i].hAtr   != INVALID_HANDLE) IndicatorRelease(g_syms[i].hAtr);
+      if(g_syms[i].hHtf   != INVALID_HANDLE) IndicatorRelease(g_syms[i].hHtf);
+      if(g_syms[i].hAdx   != INVALID_HANDLE) IndicatorRelease(g_syms[i].hAdx);
+     }
+   //--- dans le testeur de stratégie : bilan des signaux de la période testée
+   if(MQLInfoInteger(MQL_TESTER) && InpTrack)
+     {
+      string pf = g_statGrossL > 0 ? DoubleToString(g_statGrossW / g_statGrossL, 2) : "n/d";
+      Print("===== BILAN ALERTESPRO =====");
+      Print(StatsText());
+      Print("Facteur de profit : ", pf, "  |  signaux encore ouverts : ", ArraySize(g_tracks));
+      Print("Avec ", DoubleToString(InpRiskPct, 1), " % de risque par trade, cela fait environ ",
+            DoubleToString(g_statR * InpRiskPct, 1), " % du compte (sans intérêts composés).");
      }
    Comment("");
   }
@@ -1055,13 +1378,19 @@ void OnTick()
    CheckLines();
    //--- dans le testeur de stratégie, le minuteur est remplacé par les ticks
    if(MQLInfoInteger(MQL_TESTER))
+     {
       for(int i = 0; i < ArraySize(g_syms); i++)
          CheckSymbol(g_syms[i]);
+      if(InpTrack)
+         CheckTracks();
+     }
   }
 
 void OnTimer()
   {
    CheckLines();
+   if(InpTrack)
+      CheckTracks();
    for(int i = 0; i < ArraySize(g_syms); i++)
       CheckSymbol(g_syms[i]);
    CheckAccount();

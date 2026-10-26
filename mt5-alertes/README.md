@@ -17,11 +17,15 @@ Elle affiche en direct :
 
 - **Accueil** : équité, résultat du jour, marge, positions ouvertes, dernier
   signal, annonces à venir, calculatrice de lot et règles de risque.
-- **Signaux** : chaque signal avec entrée, stop, objectif (touche un prix pour
-  le copier), lot, risque, et la position du prix actuel entre le SL et le TP.
-- **Marchés** : tendance, prix, jauge RSI, volatilité et annonce proche pour
-  chaque marché, ainsi que le résumé du matin.
-- **Alertes** : tout l'historique, filtrable par type.
+- **Signaux** : ton **bilan** (taux de réussite, résultat en R, facteur de
+  profit, courbe), puis chaque signal avec entrée, stop, objectif (touche un
+  prix pour le copier), lot, risque, son **statut** (en cours, TP touché, SL
+  touché, expiré) et un bouton **Copier l'ordre**.
+- **Marchés** : tendance, prix, **mini-graphique et variation sur 24 h**, jauge
+  RSI, volatilité et annonce proche, ainsi que le résumé du matin.
+- **Alertes** : tout l'historique, filtrable par type (dont les résultats).
+- **Calculatrice** : préréglages par marché, remplissage avec le dernier signal
+  ou ton solde.
 
 À la première ouverture, elle démarre en **mode démo** avec des données
 d'exemple. Pour la brancher sur ton robot :
@@ -34,6 +38,10 @@ d'exemple. Pour la brancher sur ton robot :
 5. Installe-la : sur iPhone avec **Partager > Sur l'écran d'accueil**, sur
    Android avec **⋮ > Installer l'application**.
 
+**Pour recevoir les signaux même appli fermée** : installe l'appli gratuite
+**ntfy** (App Store / Play Store), touche **+** et abonne-toi à ton code
+(serveur `ntfy.sh`). Ou active Telegram dans le robot (voir plus bas).
+
 Les données passent par **ntfy.sh**, un relais de messages gratuit et sans
 inscription. Ton code sert de mot de passe : garde-le pour toi. Le relais garde
 les messages 12 h et l'appli conserve l'historique sur ton téléphone. Le
@@ -45,6 +53,8 @@ Un signal n'est envoyé que si **toutes** les conditions sont réunies :
 
 1. **Tendance** : prix au-dessus de l'EMA 200 → on cherche seulement des achats.
    Prix en dessous → seulement des ventes. On ne trade pas à contre-courant.
+   La tendance doit être **la même en H4** (unité supérieure, réglable) et
+   assez **forte** (ADX ≥ 20).
 2. **Déclencheur** (à la clôture de la bougie) :
    - croisement de la MM 20 et de la MM 50 dans le sens de la tendance, ou
    - RSI qui ressort de la survente (achat) ou du surachat (vente) dans le sens
@@ -52,6 +62,8 @@ Un signal n'est envoyé que si **toutes** les conditions sont réunies :
 3. **Pas d'annonce économique forte** 30 min avant ou après (NFP, taux de la
    Fed, BCE, inflation…), lue dans le calendrier intégré à MT5.
 4. **Spread raisonnable** par rapport à la volatilité.
+5. **Un seul signal à la fois par marché** : le robot attend que le précédent
+   touche son TP, son SL ou expire.
 
 Exemple de message :
 
@@ -75,6 +87,22 @@ Lot 0.31 = risque 97.65 EUR (1.0 %)
 - **Lot** : calculé pour que, si le stop est touché, tu perdes **1 % de ton
   solde**, pas plus. Si même le lot minimum dépasse ce risque, le robot te dit
   de passer ton tour.
+
+## Le suivi des résultats
+
+Chaque signal est suivi jusqu'à sa conclusion :
+
+- **TP touché** (+2 R), **SL touché** (−1 R) ou **expiré** après 48 bougies
+  (clôturé au prix du moment).
+- Tu reçois un message à chaque conclusion, avec le bilan à jour.
+- Le bilan est sauvegardé dans `MQL5/Files/AlertesPro_journal.csv` : il survit
+  aux redémarrages. Si MT5 était fermé, le robot rattrape au démarrage les TP et
+  SL touchés pendant la coupure (grâce à l'historique M1).
+- **R** = le montant risqué sur un signal. Avec 1 % de risque, +10 R ≈ +10 %
+  du compte.
+
+Le bilan s'affiche dans l'appli (onglet Signaux), sur le graphique MT5 et dans
+le résumé du matin.
 
 ## Ce qu'il surveille en plus
 
@@ -107,7 +135,10 @@ Tous les réglages se trouvent dans les paramètres du robot.
 1. **Testeur de stratégie** (Ctrl+R dans MT5) : choisis AlertesPro, un symbole,
    H1, une période de 1 à 2 ans, mode « Chaque tick basé sur les ticks réels ».
    Les signaux apparaissent dans le journal du testeur (le calendrier
-   économique n'y est pas disponible).
+   économique n'y est pas disponible). À la fin du test, le robot écrit un
+   **BILAN ALERTESPRO** : nombre de signaux, pourcentage gagnant, total en R
+   et facteur de profit. Si le total est négatif sur 1 à 2 ans, retire ce
+   marché de la liste.
 2. **Compte démo** pendant au moins 1 mois : prends chaque signal comme si
    c'était de l'argent réel et note les résultats.
 3. Passe en réel avec un petit capital seulement si les résultats en démo sont

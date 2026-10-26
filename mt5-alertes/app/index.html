@@ -147,6 +147,8 @@ input{font:inherit;color:inherit}
 .ic.account{background:var(--sell-bg);color:var(--sell)}
 .ic.line,.ic.market{background:rgba(94,200,255,.12);color:#5ec8ff}
 .ic.summary,.ic.info{background:var(--card3);color:var(--muted)}
+.ic.result{background:var(--buy-bg);color:var(--buy)}
+.ic.result.loss{background:var(--sell-bg);color:var(--sell)}
 .it-body{min-width:0;flex:1}
 .it-title{font-weight:600;font-size:14px;display:flex;justify-content:space-between;gap:10px}
 .it-title time{flex:none;font-weight:500;font-size:12px;color:var(--dim)}
@@ -211,7 +213,33 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
 .banner{display:flex;gap:12px;align-items:center;padding:14px;border-radius:var(--radius);background:var(--gold-bg);border:1px solid rgba(245,185,74,.25);margin-bottom:14px}
 .banner p{font-size:13.5px;flex:1} .banner b{color:var(--gold)}
 .disclaimer{font-size:12px;color:var(--dim);text-align:center;margin:26px 10px 0;line-height:1.5}
-@media (max-width:380px){.levels{grid-template-columns:1fr}.mk-grid{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}}
+/* Performance */
+.perf-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.perf-big{font-size:30px;font-weight:700;letter-spacing:-.03em}
+.perf-sub{font-size:12.5px;color:var(--muted);font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+.stat{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 8px}
+.stat span{display:block;font-size:11px;color:var(--muted);font-weight:600}
+.stat b{font-size:15px;font-weight:600}
+.curve{display:block;width:100%;height:90px;margin-top:14px}
+.persym{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.perf-note{font-size:12px;color:var(--dim);margin-top:10px}
+/* Statut d'un signal */
+.res{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;padding:4px 9px;border-radius:999px}
+.res.tp{background:var(--buy-bg);color:var(--buy)}
+.res.sl{background:var(--sell-bg);color:var(--sell)}
+.res.exp{background:var(--card3);color:var(--muted)}
+.res.open{background:var(--accent-bg);color:var(--accent)}
+.sig.done{opacity:.82}
+.mini-btn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:6px 11px;border-radius:999px;background:var(--accent-bg);color:var(--accent)}
+/* Mini-graphique des marchés */
+.spark{display:block;width:100%;height:34px;margin:2px 0 8px}
+.mk-chg{font-size:12px;font-weight:700}
+/* Calculatrice */
+.select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 18px) 52%,calc(100% - 13px) 52%;background-size:5px 5px;background-repeat:no-repeat;padding-right:34px}
+.quick{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+@media (max-width:380px){.levels{grid-template-columns:1fr}.mk-grid{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
@@ -228,6 +256,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
   <section class="view on" id="v-home">
     <div id="setupBanner"></div>
     <div id="hero"></div>
+    <div id="perfHome"></div>
     <div class="sec-title"><h2>Dernier signal</h2><button data-go="signals">Tous les signaux</button></div>
     <div id="lastSignal"></div>
     <div id="posWrap"></div>
@@ -235,6 +264,13 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     <div id="newsList"></div>
     <div class="sec-title"><h2>Calculatrice de lot</h2></div>
     <div class="card">
+      <label class="field" style="margin-top:0"><span>Marché</span>
+        <select class="input select" id="cSym">
+          <option value="10">EURUSD · GBPUSD (pip ≈ 10 par lot)</option>
+          <option value="6.7">USDJPY (pip ≈ 6,7 par lot)</option>
+          <option value="1">XAUUSD or (0,01 $ ≈ 1 par lot)</option>
+          <option value="custom">Autre : je saisis la valeur</option>
+        </select></label>
       <div class="grid2">
         <label class="field"><span>Capital</span><input class="input num" id="cCap" inputmode="decimal" value="10000"></label>
         <label class="field"><span>Risque %</span><input class="input num" id="cRisk" inputmode="decimal" value="1"></label>
@@ -243,7 +279,8 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
       </div>
       <div class="calc-out"><div><div class="muted" style="font-size:12.5px;font-weight:600">Lot à prendre</div><b class="num" id="cLot">0.33</b></div>
         <div style="text-align:right"><div class="muted" style="font-size:12.5px;font-weight:600">Perte max</div><b class="num" id="cMax" style="font-size:17px">100</b></div></div>
-      <p class="dim" style="font-size:12px;margin-top:10px">Valeur du pip : environ 10 pour EURUSD ou GBPUSD (compte en USD ou EUR, 1 lot standard). Elle change selon l'actif : vérifie-la dans MT5.</p>
+      <div class="quick"><button class="mini-btn" id="cFromSig">Remplir avec le dernier signal</button><button class="mini-btn" id="cFromBal">Mon solde</button></div>
+      <p class="dim" style="font-size:12px;margin-top:10px">Valeurs approximatives pour 1 lot standard. Elles varient selon le courtier et la devise du compte : vérifie-les dans MT5 (clic droit sur le symbole › Spécification).</p>
     </div>
     <div class="sec-title"><h2>Les règles</h2></div>
     <div class="card rules" id="rules"></div>
@@ -251,7 +288,9 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
 
   <!-- SIGNAUX -->
   <section class="view" id="v-signals">
-    <div class="sec-title" style="margin-top:4px"><h2>Signaux de trading</h2><span class="muted" style="font-size:13px" id="sigCount"></span></div>
+    <div class="sec-title" style="margin-top:4px"><h2>Performance des signaux</h2></div>
+    <div id="perfFull"></div>
+    <div class="sec-title"><h2>Signaux de trading</h2><span class="muted" style="font-size:13px" id="sigCount"></span></div>
     <div class="filters" id="sigFilters"></div>
     <div class="stack" id="sigList"></div>
   </section>
@@ -295,6 +334,17 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
         <li>Sur iPhone : <b>Partager › Sur l'écran d'accueil</b>. Sur Android : <b>⋮ › Installer l'application</b>.</li>
       </ol>
       <p class="dim" style="font-size:12.5px">Garde ton code pour toi : quiconque le connaît peut lire tes alertes. Les messages restent 12 h sur le relais, l'historique est gardé sur ton téléphone.</p>
+    </div>
+
+    <div class="sec-title"><h2>Alertes même appli fermée</h2></div>
+    <div class="card">
+      <p class="muted" style="font-size:13.5px;margin-bottom:12px">Un navigateur ne peut pas réveiller ton téléphone quand l'appli est fermée. Pour ne rater aucun signal, ajoute l'une de ces deux options :</p>
+      <ol class="steps">
+        <li><b>Appli ntfy</b> (gratuite) : installe <b>ntfy</b> depuis l'App Store ou le Play Store, touche <b>+</b>, colle ton code comme nom de sujet, serveur <code>ntfy.sh</code>. Les signaux sonnent comme un SMS.</li>
+        <li><b>Telegram</b> : dans les paramètres du robot, mets <b>Telegram = true</b> avec le jeton de ton bot et ton chat id (voir le guide du robot).</li>
+      </ol>
+      <button class="btn block" id="copyCode2">Copier mon code pour ntfy</button>
+      <p class="dim" style="font-size:12px;margin-top:10px">Les mises à jour du compte (toutes les 15 min) partent en priorité minimale : elles ne sonnent pas.</p>
     </div>
 
     <div class="sec-title"><h2>Préférences</h2></div>
@@ -370,14 +420,14 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     catch (e) { toast(txt); }
   }
 
-  // tags "cle=valeur" -> objet (m et p peuvent se répéter)
+  // tags "cle=valeur" -> objet (m, p et o peuvent se répéter)
   function parse(m) {
-    const d = { m: [], p: [] };
+    const d = { m: [], p: [], o: [] };
     (m.tags || []).forEach((t) => {
       const i = t.indexOf("=");
       if (i < 1) return;
       const k = t.slice(0, i).toLowerCase(), v = t.slice(i + 1);
-      if (k === "m" || k === "p") d[k].push(v.split("|")); else d[k] = v;
+      if (k === "m" || k === "p" || k === "o") d[k].push(v.split("|")); else d[k] = v;
     });
     return { id: m.id, time: m.time, title: m.title || "", message: m.message || "", kind: (d.k || "info").toLowerCase(), d };
   }
@@ -393,6 +443,8 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     summary: '<path d="M4 6h16M4 12h16M4 18h10"/>',
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/>',
     check: '<path d="M20 6L9 17l-5-5"/>',
+    result: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/>'
   };
   const icon = (k) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[k] || ICONS.info) + "</svg>";
@@ -401,23 +453,29 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
   // ---------- Données ----------
   const all = () => S.msgs.map(parse).sort((a, b) => b.time - a.time);
   const lastStatus = () => all().find((m) => m.kind === "status");
+  const statuses = () => all().filter((m) => m.kind === "status").reverse(); // du plus ancien au plus récent
+  const results = () => all().filter((m) => m.kind === "result");
+  const resultBySid = () => { const map = {}; results().forEach((r) => { if (r.d.sid) map[r.d.sid] = r; }); return map; };
+  const MAX_STATUS = 96; // 24 h d'historique à raison d'un statut toutes les 15 min
 
   function addMessages(list, live) {
     const known = new Set(S.msgs.map((m) => m.id));
     const fresh = list.filter((m) => m && m.id && !known.has(m.id));
     if (!fresh.length) return;
     S.msgs = S.msgs.concat(fresh).sort((a, b) => a.time - b.time);
-    // on garde seulement le dernier statut et les MAX_MSG derniers messages
-    const statuses = S.msgs.filter((m) => (m.tags || []).includes("k=status"));
-    const keep = statuses.slice(-1).map((m) => m.id);
-    S.msgs = S.msgs.filter((m) => !(m.tags || []).includes("k=status") || keep.includes(m.id)).slice(-MAX_MSG);
+    // on garde les derniers statuts (mini-graphiques) et les MAX_MSG derniers autres messages
+    const isStatus = (m) => (m.tags || []).includes("k=status");
+    const keep = new Set(S.msgs.filter(isStatus).slice(-MAX_STATUS).map((m) => m.id));
+    const others = S.msgs.filter((m) => !isStatus(m)).slice(-MAX_MSG);
+    const keepOthers = new Set(others.map((m) => m.id));
+    S.msgs = S.msgs.filter((m) => keep.has(m.id) || keepOthers.has(m.id));
     if (!S.demo) store.set("msgs", S.msgs);
     if (live) fresh.map(parse).filter((m) => m.kind !== "status").forEach(alertUser);
     render();
   }
 
   function alertUser(m) {
-    if (S.sound && m.kind === "signal") beep();
+    if (S.sound && (m.kind === "signal" || m.kind === "result")) beep();
     if (S.notif && document.hidden && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(m.title || "AlertesPro", { body: m.message.slice(0, 180), icon: "icon-180.png", tag: m.id }); } catch (e) {}
     }
@@ -517,16 +575,35 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     return row ? num(row[4]) : null;
   }
 
-  function signalCard(m, compact) {
+  const TF_HOURS = { M15: 0.25, M30: 0.5, H1: 1, H2: 2, H4: 4, D1: 24 };
+
+  // état d'un signal : résultat connu, en cours, ou inconnu
+  function signalState(m, ctx) {
+    const d = m.d;
+    const r = d.sid && ctx.res[d.sid];
+    if (r) {
+      const rv = num(r.d.r), res = (r.d.res || "").toLowerCase();
+      const txt = res === "tp" ? "TP touché" : res === "sl" ? "SL touché" : "Expiré";
+      return { done: true, res: res === "tp" || res === "sl" ? res : "exp", r: rv, html: '<span class="res ' + (res === "tp" ? "tp" : res === "sl" ? "sl" : "exp") + '">' + (res === "tp" ? "✓ " : res === "sl" ? "✕ " : "⌛ ") + txt + ' <span class="num">' + (rv > 0 ? "+" : "") + fmt(rv) + " R</span></span>" };
+    }
+    const life = (num(d.exp) || 48) * (TF_HOURS[(d.tf || "H1").toUpperCase()] || 1) * 3600;
+    const open = d.sid && ctx.open.has(d.sid);
+    if (open || (d.sid && Date.now() / 1000 - m.time < life)) return { done: false, html: '<span class="res open">● En cours</span>' };
+    return { done: false, html: "" };
+  }
+
+  function signalCard(m, compact, ctx) {
+    ctx = ctx || signalCtx();
     const d = m.d, buy = (d.side || "").toLowerCase() === "buy", side = buy ? "buy" : "sell";
     const sym = (d.sym || "").toUpperCase(), rr = num(d.rr) || 2;
     const entry = num(d.entry), sl = num(d.sl), tp = num(d.tp), dg = Math.max(decimals(d.entry), decimals(d.sl));
     const lines = m.message.split("\n");
     const reason = lines[1] || "";
     const isNew = Date.now() / 1000 - m.time < 3600;
+    const state = signalState(m, ctx);
     const price = marketPrice(sym);
     let mark = "", progress = "";
-    if (price && isFinite(sl) && isFinite(tp) && tp !== sl && Date.now() / 1000 - m.time < 3 * 86400) {
+    if (!state.done && price && isFinite(sl) && isFinite(tp) && tp !== sl && Date.now() / 1000 - m.time < 3 * 86400) {
       const pos = buy ? (price - sl) / (tp - sl) : (sl - price) / (sl - tp);
       const c = Math.max(0, Math.min(1, pos));
       mark = '<i class="mark" style="left:' + (c * 100).toFixed(1) + '%"></i>';
@@ -538,17 +615,26 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
       : '<span class="chip warn">Lot minimum trop gros : passe ton tour</span>';
     const newsWarn = /Attention annonce/.test(m.message) ? '<span class="chip warn">Annonce proche</span>' : "";
     const lv = (cls, lbl, val, sub) => '<button class="lv ' + cls + '" data-copy="' + esc(val) + '"><span>' + lbl + "</span><b class=\"num\">" + esc(val) + "</b>" + (sub ? "<i>" + sub + "</i>" : "") + "</button>";
-    return '<article class="sig ' + side + '">' +
+    const order = (buy ? "ACHAT " : "VENTE ") + sym + (num(d.lot) > 0 ? " " + d.lot + " lot" : "") + " | SL " + (d.sl || "") + " | TP " + (d.tp || "");
+    const copyOrder = state.done ? "" : '<button class="mini-btn" data-copy="' + esc(order) + '">' + icon("copy").replace("<svg ", '<svg style="width:14px;height:14px" ') + "Copier l'ordre</button>";
+    return '<article class="sig ' + side + (state.done ? " done" : "") + '">' +
       '<div class="sig-head"><span class="badge ' + side + '">' + (buy ? "ACHAT" : "VENTE") + '</span><span class="sig-sym">' + esc(sym) + '</span><span class="tf">' + esc(d.tf || "") + "</span>" +
-      '<span class="ago">' + ago(m.time) + "</span>" + (isNew ? '<span class="new">NOUVEAU</span>' : "") + "</div>" +
+      '<span class="ago">' + ago(m.time) + "</span>" + (isNew && !state.done ? '<span class="new">NOUVEAU</span>' : "") + "</div>" +
+      (state.html ? '<div style="margin-top:10px">' + state.html + "</div>" : "") +
       '<p class="reason">' + esc(reason) + "</p>" +
       '<div class="levels">' + lv("", "ENTRÉE", d.entry, "") + lv("sl", "STOP", d.sl, esc(d.slp || "") + " pips") + lv("tp", "OBJECTIF", d.tp, esc(d.tpp || "") + " pips") + "</div>" + '<p class="copy-hint">Touche un prix pour le copier.</p>' +
       (compact ? "" : '<div class="rr"><div class="r" style="flex:1"></div><div class="g" style="flex:' + rr + '"></div>' + mark + "</div>" +
       '<div class="rr-lbl"><span>SL</span><span>Entrée</span><span>TP · ratio 1:' + fmt(rr, rr % 1 ? 1 : 0) + "</span></div>") +
-      '<div class="sig-foot">' + lotTxt + newsWarn + progress + "</div></article>";
+      '<div class="sig-foot">' + lotTxt + newsWarn + progress + copyOrder + "</div></article>";
+  }
+
+  function signalCtx() {
+    const st = lastStatus();
+    return { res: resultBySid(), open: new Set(st ? st.d.o.map((o) => o[0]) : []) };
   }
 
   function renderSignals() {
+    const ctx = signalCtx();
     const sigs = all().filter((m) => m.kind === "signal");
     const syms = [...new Set(sigs.map((m) => (m.d.sym || "").toUpperCase()))];
     const f = S.sigFilter;
@@ -556,9 +642,68 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
       '<button data-sf="' + esc(k) + '" class="' + (f === k ? "on" : "") + '">' + esc({ all: "Tous", buy: "Achats", sell: "Ventes" }[k] || k) + "</button>").join("");
     const list = sigs.filter((m) => f === "all" || (f === "buy" || f === "sell" ? (m.d.side || "").toLowerCase() === f : (m.d.sym || "").toUpperCase() === f));
     $("sigCount").textContent = sigs.length ? sigs.length + " signal" + (sigs.length > 1 ? "s" : "") : "";
-    $("sigList").innerHTML = list.length ? list.map((m) => signalCard(m, false)).join("")
+    $("sigList").innerHTML = list.length ? list.map((m) => signalCard(m, false, ctx)).join("")
       : empty("Aucun signal pour l'instant", "Le robot n'envoie un signal que si tendance, déclencheur, calendrier et spread sont bons. C'est normal d'attendre.");
-    $("lastSignal").innerHTML = sigs.length ? signalCard(sigs[0], false) : empty("Pas encore de signal", "Ils apparaîtront ici dès que le robot en trouve un.");
+    $("lastSignal").innerHTML = sigs.length ? signalCard(sigs[0], false, ctx) : empty("Pas encore de signal", "Ils apparaîtront ici dès que le robot en trouve un.");
+  }
+
+  // ---------- Performance ----------
+  function perfData() {
+    const st = lastStatus();
+    const local = results().slice().reverse(); // du plus ancien au plus récent
+    let n, wins, sumR, gw, gl;
+    if (st && st.d.st) { // chiffres officiels du robot (tous les signaux depuis le début)
+      [n, wins, sumR, gw, gl] = st.d.st.split("|").map(num);
+    } else {
+      const rs = local.map((r) => num(r.d.r)).filter(isFinite);
+      n = rs.length; wins = rs.filter((x) => x > 0).length; sumR = rs.reduce((a, b) => a + b, 0);
+      gw = rs.filter((x) => x > 0).reduce((a, b) => a + b, 0); gl = -rs.filter((x) => x <= 0).reduce((a, b) => a + b, 0);
+    }
+    let streak = 0, worst = 0;
+    local.forEach((r) => { if (num(r.d.r) <= 0) { streak++; worst = Math.max(worst, streak); } else streak = 0; });
+    const bySym = {};
+    local.forEach((r) => { const s = (r.d.sym || "?").toUpperCase(); bySym[s] = bySym[s] || [0, 0]; bySym[s][0]++; bySym[s][1] += num(r.d.r) || 0; });
+    return { n: n || 0, wins: wins || 0, sumR: sumR || 0, pf: gl > 0 ? gw / gl : null, worst, local, bySym, open: st ? st.d.o.length : 0 };
+  }
+
+  function curveSvg(values) {
+    if (values.length < 2) return "";
+    const pts = [0].concat(values), W = 300, H = 90, pad = 6;
+    let c = 0; const cum = pts.map((v, i) => (c += i ? v : 0));
+    const lo = Math.min(0, ...cum), hi = Math.max(0, ...cum), span = hi - lo || 1;
+    const x = (i) => pad + i * (W - 2 * pad) / (cum.length - 1), y = (v) => H - pad - (v - lo) * (H - 2 * pad) / span;
+    const line = cum.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1)).join(" ");
+    const col = cum[cum.length - 1] >= 0 ? "var(--buy)" : "var(--sell)";
+    return '<svg class="curve" viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" role="img" aria-label="Résultat cumulé en R">' +
+      '<line x1="0" x2="' + W + '" y1="' + y(0).toFixed(1) + '" y2="' + y(0).toFixed(1) + '" stroke="rgba(255,255,255,.15)" stroke-dasharray="3 4"/>' +
+      '<path d="' + line + " L" + x(cum.length - 1).toFixed(1) + " " + y(0).toFixed(1) + " L" + x(0).toFixed(1) + " " + y(0).toFixed(1) + 'Z" fill="' + col + '" opacity=".12"/>' +
+      '<path d="' + line + '" fill="none" stroke="' + col + '" stroke-width="2.2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>';
+  }
+
+  function renderPerf() {
+    const p = perfData();
+    if (!p.n) {
+      const txt = p.open ? p.open + " signal" + (p.open > 1 ? "s" : "") + " en cours. Le bilan apparaît dès que le premier touche son TP ou son SL."
+        : "Le robot suit chaque signal jusqu'au TP, au SL ou à l'expiration. Ton bilan apparaîtra ici.";
+      $("perfFull").innerHTML = empty("Pas encore de résultat", txt);
+      $("perfHome").innerHTML = "";
+      return;
+    }
+    const rate = p.n ? p.wins / p.n * 100 : 0, cls = p.sumR >= 0 ? "up" : "down";
+    const stats = '<div class="stats"><div class="stat"><span>Signaux</span><b class="num">' + p.n + '</b></div>' +
+      '<div class="stat"><span>Gagnants</span><b class="num">' + fmt(rate, 0) + ' %</b></div>' +
+      '<div class="stat"><span>Moyenne</span><b class="num ' + cls + '">' + (p.sumR > 0 ? "+" : "") + fmt(p.sumR / p.n) + ' R</b></div>' +
+      '<div class="stat"><span>Fact. profit</span><b class="num">' + (p.pf ? fmt(p.pf) : "–") + "</b></div></div>";
+    const head = '<div class="perf-head"><div><div class="perf-sub">Résultat total</div><div class="perf-big num ' + cls + '">' + (p.sumR > 0 ? "+" : "") + fmt(p.sumR, 1) + ' R</div></div>' +
+      '<div style="text-align:right"><div class="perf-sub">En cours</div><div class="num" style="font-size:18px;font-weight:600">' + p.open + "</div></div></div>";
+    const syms = Object.keys(p.bySym).sort().map((s) => { const [k, r] = p.bySym[s]; return '<span class="chip"><b>' + esc(s) + '</b><span class="num ' + (r >= 0 ? "up" : "down") + '">' + (r > 0 ? "+" : "") + fmt(r, 1) + " R</span><span class=\"dim\">(" + k + ")</span></span>"; }).join("");
+    const riskPct = num((lastStatus() || { d: {} }).d.risk) || 1;
+    $("perfFull").innerHTML = '<div class="card">' + head + stats + curveSvg(p.local.map((r) => num(r.d.r) || 0)) +
+      (syms ? '<div class="persym">' + syms + "</div>" : "") +
+      '<p class="perf-note">1 R = le montant risqué par signal (' + fmt(riskPct, 1) + " % du compte). Si tu avais pris tous les signaux : " + (p.sumR >= 0 ? "+" : "") + fmt(p.sumR * riskPct, 1) + " % du compte environ." +
+      (p.worst ? " Pire série : " + p.worst + " perte" + (p.worst > 1 ? "s" : "") + " d'affilée." : "") + (p.n < 30 ? " Moins de 30 signaux : bilan encore peu fiable." : "") + "</p></div>";
+    $("perfHome").innerHTML = '<div class="sec-title"><h2>Performance des signaux</h2><button data-go="signals">Détails</button></div>' +
+      '<div class="card">' + head + stats + "</div>";
   }
 
   function renderMarkets() {
@@ -567,12 +712,23 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     if (!st || !st.d.m.length) {
       $("mkList").innerHTML = empty("Pas de données marché", "Le robot envoie l'état des marchés toutes les 15 minutes.");
     } else {
+      const hist = statuses();
       $("mkList").innerHTML = '<div class="mk-grid">' + st.d.m.map((r) => {
         const [sym, dir, rsi, atr, px, news] = r, rv = num(rsi);
         const t = dir === "up" ? '<span class="trend up">▲ Hausse</span>' : dir === "down" ? '<span class="trend down">▼ Baisse</span>' : '<span class="trend flat">–</span>';
         const zone = rv >= 70 ? "Surachat" : rv <= 30 ? "Survente" : "Neutre";
+        const series = hist.map((h) => { const row = h.d.m.find((x) => (x[0] || "").toUpperCase() === (sym || "").toUpperCase()); return row ? num(row[4]) : NaN; }).filter(isFinite);
+        let spark = "", chg = "";
+        if (series.length >= 3) {
+          const lo = Math.min(...series), hi = Math.max(...series), span = hi - lo || 1, W = 120, H = 34;
+          const pts = series.map((v, i) => (i * W / (series.length - 1)).toFixed(1) + "," + (H - 3 - (v - lo) * (H - 6) / span).toFixed(1)).join(" ");
+          const upMove = series[series.length - 1] >= series[0];
+          spark = '<svg class="spark" viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" aria-hidden="true"><polyline points="' + pts + '" fill="none" stroke="' + (upMove ? "var(--buy)" : "var(--sell)") + '" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>';
+          const pct = (series[series.length - 1] - series[0]) / series[0] * 100;
+          chg = '<span class="mk-chg ' + (pct >= 0 ? "up" : "down") + '">' + (pct >= 0 ? "+" : "") + fmt(pct, 2) + " %</span>";
+        }
         return '<div class="mk"><div class="mk-top"><span class="mk-sym">' + esc(sym) + "</span>" + t + "</div>" +
-          '<div class="mk-px num">' + esc(px || "–") + "</div>" +
+          '<div class="mk-px num" style="display:flex;align-items:baseline;justify-content:space-between;gap:6px">' + esc(px || "–") + chg + "</div>" + spark +
           '<div class="gauge" title="RSI"><i style="left:' + Math.max(0, Math.min(100, rv || 50)) + '%"></i></div>' +
           '<div class="mk-meta"><span>RSI <b class="num" style="color:var(--text)">' + fmt(rv, 0) + "</b> · " + zone + "</span>" +
           (news === "1" ? '<span class="newsflag">● Annonce</span>' : "<span>ATR " + fmt(num(atr), 0) + " p</span>") + "</div></div>";
@@ -607,7 +763,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     }).join("") + "</div>" : '<div class="card" style="display:flex;gap:12px;align-items:center"><div class="ic news">' + icon("news") + '</div><div class="muted" style="font-size:13.5px">Aucune annonce forte dans les prochaines 30 min. Le robot te prévient avant chacune.</div></div>';
   }
 
-  const FEED_KINDS = { all: "Tout", signal: "Signaux", news: "Annonces", trade: "Positions", account: "Compte", line: "Lignes", market: "Marché", summary: "Résumés", info: "Infos" };
+  const FEED_KINDS = { all: "Tout", signal: "Signaux", result: "Résultats", news: "Annonces", trade: "Positions", account: "Compte", line: "Lignes", market: "Marché", summary: "Résumés", info: "Infos" };
   function renderFeed() {
     const msgs = all().filter((m) => m.kind !== "status");
     const present = new Set(msgs.map((m) => m.kind));
@@ -615,7 +771,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
       '<button data-ff="' + k + '" class="' + (S.feedFilter === k ? "on" : "") + '">' + FEED_KINDS[k] + "</button>").join("");
     const list = msgs.filter((m) => S.feedFilter === "all" || m.kind === S.feedFilter);
     $("feed").innerHTML = list.length ? list.map((m) => {
-      const loss = m.kind === "trade" && num(m.d.profit) < 0;
+      const loss = (m.kind === "trade" && num(m.d.profit) < 0) || (m.kind === "result" && num(m.d.r) <= 0);
       const body = m.message.split("\n").slice(m.message.indexOf("\n") > 0 ? 1 : 0).join("\n");
       const text = body === m.title ? "" : body;
       return '<div class="it"><div class="ic ' + esc(m.kind) + (loss ? " loss" : "") + '">' + icon(m.kind) + '</div><div class="it-body"><div class="it-title"><span>' + esc(m.title) + "</span><time>" + hhmm(m.time) + "</time></div>" +
@@ -642,7 +798,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     "Pas deux positions sur la même devise dans le même sens.", "Un signal n'est pas une obligation : si le graphique ne te plaît pas, passe ton tour."];
 
   function render() {
-    renderBanner(); renderHero(); renderSignals(); renderPositions(); renderNews(); renderMarkets(); renderFeed(); renderBadges();
+    renderBanner(); renderHero(); renderPerf(); renderSignals(); renderPositions(); renderNews(); renderMarkets(); renderFeed(); renderBadges();
   }
 
   // ---------- Calculatrice ----------
@@ -652,7 +808,30 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     const lot = sl > 0 && pip > 0 ? Math.floor(riskMoney / (sl * pip) * 100) / 100 : NaN;
     $("cLot").textContent = isFinite(lot) ? fmt(lot) : "–";
     $("cMax").textContent = isFinite(lot) ? fmt(lot * sl * pip) : "–";
-    store.set("calc", [$("cCap").value, $("cRisk").value, $("cSl").value, $("cPip").value]);
+    store.set("calc", [$("cCap").value, $("cRisk").value, $("cSl").value, $("cPip").value, $("cSym").value]);
+  }
+
+  const PRESET = { EURUSD: "10", GBPUSD: "10", USDJPY: "6.7", XAUUSD: "1" };
+  function applyPreset() {
+    const v = $("cSym").value;
+    if (v !== "custom") $("cPip").value = v;
+    calc();
+  }
+  function calcFromSignal() {
+    const sig = all().find((m) => m.kind === "signal");
+    if (!sig) return toast("Pas encore de signal.");
+    const sym = (sig.d.sym || "").toUpperCase();
+    if (num(sig.d.slp) > 0) $("cSl").value = sig.d.slp;
+    const p = PRESET[sym];
+    $("cSym").value = p || "custom";
+    if (p) $("cPip").value = p;
+    calc(); toast("Stop du signal " + sym + " : " + sig.d.slp + " pips" + (p ? "" : ". Saisis la valeur du pip."));
+  }
+  function calcFromBalance() {
+    const st = lastStatus();
+    if (!st || !isFinite(num(st.d.eq))) return toast("Le solde arrive avec la prochaine mise à jour du robot.");
+    $("cCap").value = String(Math.round(num(st.d.eq)));
+    calc(); toast("Capital : ton équité actuelle.");
   }
 
   // ---------- Démo ----------
@@ -660,22 +839,48 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     const now = Math.floor(Date.now() / 1000);
     let i = 0;
     const mk = (ago, kind, title, message, tags) => ({ id: "demo" + (i++), time: now - ago, event: "message", title, message, tags: ["k=" + kind].concat(tags || []) });
-    return [
-      mk(30, "status", "Statut", "Mise à jour du compte", ["bal=10000.00", "eq=10142.60", "cur=EUR", "day=86.40", "ml=1840", "pos=2", "tf=H1", "risk=1.0",
-        "m=EURUSD|up|58.4|14.2|1.08734|0", "m=GBPUSD|up|63.1|17.9|1.27612|0", "m=USDJPY|down|41.7|21.3|149.218|1", "m=XAUUSD|up|71.3|268.0|2384.15|1",
-        "p=EURUSD|buy|0.31|98.20|1", "p=XAUUSD|buy|0.05|44.40|1"]),
-      mk(600, "signal", "SIGNAL ACHAT EURUSD H1", "SIGNAL ACHAT EURUSD H1\nCroisement haussier MM20/MM50, prix au-dessus de l'EMA200\nEntrée 1.08512\nSL 1.08197 (31.5 pips)\nTP 1.09142 (63.0 pips)\nLot 0.31 = risque 97.65 EUR (1.0 %)",
-        ["sym=EURUSD", "side=buy", "tf=H1", "entry=1.08512", "sl=1.08197", "tp=1.09142", "slp=31.5", "tpp=63.0", "lot=0.31", "risk=97.65", "cur=EUR", "rr=2.0"]),
+    const out = [];
+    // 40 mises à jour du compte (toutes les 15 min) pour les mini-graphiques
+    const base = { EURUSD: 1.0841, GBPUSD: 1.2731, USDJPY: 149.96, XAUUSD: 2361.4 };
+    const drift = { EURUSD: 0.00011, GBPUSD: 0.00009, USDJPY: -0.022, XAUUSD: 0.62 };
+    const dig = { EURUSD: 5, GBPUSD: 5, USDJPY: 3, XAUUSD: 2 };
+    const meta = { EURUSD: "up|58.4|14.2", GBPUSD: "up|63.1|17.9", USDJPY: "down|41.7|21.3", XAUUSD: "up|71.3|268.0" };
+    const news = { EURUSD: 0, GBPUSD: 0, USDJPY: 1, XAUUSD: 1 };
+    for (let k = 39; k >= 0; k--) {
+      const step = 39 - k;
+      const m = Object.keys(base).map((s) => {
+        const wave = Math.sin(step / 4 + s.length) * drift[s] * 3;
+        const px = (base[s] + drift[s] * step + wave).toFixed(dig[s]);
+        return "m=" + s + "|" + meta[s] + "|" + px + "|" + news[s];
+      });
+      const tags = ["bal=10000.00", "eq=" + (10060 + step * 2.1).toFixed(2), "cur=EUR", "day=" + (step * 2.1 + 4.5).toFixed(2), "ml=1840", "pos=2", "tf=H1", "risk=1.0"].concat(m);
+      if (k === 0) tags.push("st=14|7|5.20|14.00|8.80", "o=EURUSD-1|EURUSD|buy|1.08512|1.08197|1.09142", "p=EURUSD|buy|0.31|98.20|1", "p=XAUUSD|buy|0.05|44.40|1");
+      out.push(mk(k * 900 + 30, "status", "Statut", "Mise à jour du compte", tags));
+    }
+    const sig = (ago, sid, side, sym, reason, entry, sl, tp, slp, tpp, lot, risk) => mk(ago, "signal", "SIGNAL " + (side === "buy" ? "ACHAT " : "VENTE ") + sym + " H1",
+      "SIGNAL " + (side === "buy" ? "ACHAT " : "VENTE ") + sym + " H1\n" + reason + "\nEntrée " + entry + "\nSL " + sl + " (" + slp + " pips)\nTP " + tp + " (" + tpp + " pips)\nLot " + lot + " = risque " + risk + " EUR (1.0 %)",
+      ["sid=" + sid, "exp=48", "sym=" + sym, "side=" + side, "tf=H1", "entry=" + entry, "sl=" + sl, "tp=" + tp, "slp=" + slp, "tpp=" + tpp, "lot=" + lot, "risk=" + risk, "cur=EUR", "rr=2.0"]);
+    const res = (ago, sid, side, sym, kind, r, entry, exit, st) => mk(ago, "result",
+      (kind === "tp" ? "TAKE PROFIT TOUCHÉ" : kind === "sl" ? "STOP LOSS TOUCHÉ" : "SIGNAL EXPIRÉ") + " : " + (side === "buy" ? "ACHAT " : "VENTE ") + sym,
+      (kind === "tp" ? "TAKE PROFIT TOUCHÉ" : kind === "sl" ? "STOP LOSS TOUCHÉ" : "SIGNAL EXPIRÉ") + " : " + (side === "buy" ? "ACHAT " : "VENTE ") + sym + "\nEntrée " + entry + " -> sortie " + exit + "\nRésultat " + (r > 0 ? "+" : "") + r.toFixed(2) + " R",
+      ["sid=" + sid, "sym=" + sym, "side=" + side, "res=" + kind, "r=" + r.toFixed(2), "exit=" + exit, "st=" + st]);
+    out.push(
+      sig(600, "EURUSD-1", "buy", "EURUSD", "Croisement haussier MM20/MM50, prix au-dessus de l'EMA200, H4 haussier, ADX 27", "1.08512", "1.08197", "1.09142", "31.5", "63.0", "0.31", "97.65"),
       mk(540, "trade", "Position ouverte : ACHAT EURUSD 0.31 lot à 1.08515", "Position ouverte : ACHAT EURUSD 0.31 lot à 1.08515", ["sym=EURUSD", "side=buy", "ev=open"]),
       mk(1500, "news", "ANNONCE FORTE dans 30 min : USD - Nonfarm Payrolls", "ANNONCE FORTE dans 30 min : USD - Nonfarm Payrolls\nLe marché peut bouger fort. Évite d'entrer juste avant et vérifie tes stops sur USD.", ["cur=USD", "min=30"]),
-      mk(5400, "signal", "SIGNAL VENTE USDJPY H1", "SIGNAL VENTE USDJPY H1\nRepli du RSI depuis le surachat, tendance baissière (EMA200)\nEntrée 149.682\nSL 150.002 (32.0 pips)\nTP 149.042 (64.0 pips)\nLot 0.46 = risque 98.90 EUR (1.0 %)",
-        ["sym=USDJPY", "side=sell", "tf=H1", "entry=149.682", "sl=150.002", "tp=149.042", "slp=32.0", "tpp=64.0", "lot=0.46", "risk=98.90", "cur=EUR", "rr=2.0"]),
+      res(3000, "USDJPY-1", "sell", "USDJPY", "tp", 2, "149.682", "149.042", "14|7|5.20|14.00|8.80"),
+      sig(16000, "USDJPY-1", "sell", "USDJPY", "Repli du RSI depuis le surachat, tendance baissière (EMA200, H4 baissier, ADX 31)", "149.682", "150.002", "149.042", "32.0", "64.0", "0.46", "98.90"),
+      res(30000, "GBPUSD-1", "buy", "GBPUSD", "sl", -1, "1.27410", "1.27050", "13|6|3.20|12.00|8.80"),
+      sig(52000, "GBPUSD-1", "buy", "GBPUSD", "Croisement haussier MM20/MM50, prix au-dessus de l'EMA200, H4 haussier, ADX 23", "1.27410", "1.27050", "1.28130", "36.0", "72.0", "0.27", "97.20"),
+      res(70000, "XAUUSD-1", "buy", "XAUUSD", "tp", 2, "2331.40", "2363.40", "12|6|4.20|12.00|7.80"),
+      sig(98000, "XAUUSD-1", "buy", "XAUUSD", "Rebond du RSI depuis la survente, tendance haussière (EMA200, H4 haussier, ADX 29)", "2331.40", "2315.40", "2363.40", "1600.0", "3200.0", "0.06", "96.00"),
       mk(7200, "trade", "Position fermée (Take Profit) : GBPUSD 0.25 lot à 1.27480  Résultat +142.30 EUR", "Position fermée (Take Profit) : GBPUSD 0.25 lot à 1.27480  Résultat +142.30 EUR", ["sym=GBPUSD", "ev=close", "why=Take Profit", "profit=142.30"]),
       mk(9000, "line", "EURUSD : prix monte au-dessus de 1.08400 (ligne ALERTE resistance)", "EURUSD : prix monte au-dessus de 1.08400 (ligne ALERTE resistance)", ["sym=EURUSD"]),
       mk(14000, "account", "Position SANS stop loss : XAUUSD 0.05 lot (ticket 51234). Place un stop.", "Position SANS stop loss : XAUUSD 0.05 lot (ticket 51234). Place un stop.", ["sym=XAUUSD"]),
-      mk(20000, "summary", "RÉSUMÉ DU MARCHÉ H1", "RÉSUMÉ DU MARCHÉ H1\nEURUSD : hausse, RSI 55, ATR 14.6 pips\nGBPUSD : hausse, RSI 61, ATR 18.2 pips\nUSDJPY : baisse, RSI 44, ATR 20.9 pips\nXAUUSD : hausse, RSI 68, ATR 262.0 pips\nAnnonces fortes (24 h) : 2\n- USD Nonfarm Payrolls (dans 330 min)\n- USD Unemployment Rate (dans 330 min)"),
-      mk(30000, "info", "AlertesPro démarré : 4 marché(s), H1, risque 1.0 % par trade. Les alertes arriveront ici.", "AlertesPro démarré : 4 marché(s), H1, risque 1.0 % par trade. Les alertes arriveront ici.")
-    ];
+      mk(20000, "summary", "RÉSUMÉ DU MARCHÉ H1", "RÉSUMÉ DU MARCHÉ H1\nEURUSD : hausse, RSI 55, ATR 14.6 pips\nGBPUSD : hausse, RSI 61, ATR 18.2 pips\nUSDJPY : baisse, RSI 44, ATR 20.9 pips\nXAUUSD : hausse, RSI 68, ATR 262.0 pips\nAnnonces fortes (24 h) : 2\n- USD Nonfarm Payrolls (dans 330 min)\n- USD Unemployment Rate (dans 330 min)\nBilan des signaux : 14 terminés, 50 % gagnants, +5.2 R au total."),
+      mk(110000, "info", "AlertesPro démarré : 4 marché(s), H1, risque 1.0 % par trade. Les alertes arriveront ici.", "AlertesPro démarré : 4 marché(s), H1, risque 1.0 % par trade. Les alertes arriveront ici.")
+    );
+    return out;
   }
 
   function applyMode() {
@@ -738,7 +943,12 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     if (!confirm("Effacer l'historique des alertes sur ce téléphone ?")) return;
     S.msgs = []; store.set("msgs", []); render(); toast("Historique effacé.");
   };
-  ["cCap", "cRisk", "cSl", "cPip"].forEach((id) => $(id).addEventListener("input", calc));
+  ["cCap", "cRisk", "cSl"].forEach((id) => $(id).addEventListener("input", calc));
+  $("cPip").addEventListener("input", () => { $("cSym").value = "custom"; calc(); });
+  $("cSym").addEventListener("change", applyPreset);
+  $("cFromSig").onclick = calcFromSignal;
+  $("cFromBal").onclick = calcFromBalance;
+  $("copyCode2").onclick = () => S.code ? copy(S.code) : toast("Crée d'abord ton code juste au-dessus.");
 
   document.addEventListener("visibilitychange", () => { if (!document.hidden && !S.demo && S.code) { poll().catch(() => {}); if (!es) connect(); } });
   setInterval(() => { if (!document.hidden) render(); }, 60000);
@@ -748,7 +958,8 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
   $("swSound").classList.toggle("on", S.sound);
   $("swNotif").classList.toggle("on", S.notif);
   const c = store.get("calc", null);
-  if (c) ["cCap", "cRisk", "cSl", "cPip"].forEach((id, i) => { if (c[i] != null) $(id).value = c[i]; });
+  if (c) ["cCap", "cRisk", "cSl", "cPip", "cSym"].forEach((id, i) => { if (c[i] != null) $(id).value = c[i]; });
+  if (!$("cSym").value) $("cSym").value = "custom";
   $("rules").innerHTML = RULES.map((r) => '<div class="rule">' + icon("check") + "<span>" + esc(r) + "</span></div>").join("");
   calc();
   if (!S.code && !store.get("visited", false)) { S.demo = true; store.set("demo", true); store.set("visited", true); }
