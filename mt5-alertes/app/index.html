@@ -1048,7 +1048,8 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     const btn = $("tgCheck"); btn.disabled = true; btn.textContent = "Vérification…";
     try {
       const me = await tgCall(token, "getMe");
-      if (!me.ok) return tgShow("err", "Jeton refusé par Telegram.</b><br>Recopie-le depuis BotFather. Si tu as fait /revoke, utilise le nouveau.");
+      if (me.status === 401 || me.status === 404) return tgShow("err", "Jeton refusé par Telegram.</b><br>Ce jeton n'est plus valable. Si tu as fait /revoke, colle le nouveau (BotFather › /mybots › ton bot › API Token).");
+      if (!me.ok) return tgShow("err", "Telegram ne répond pas normalement (code " + me.status + ").</b><br>Un antivirus ou un bloqueur de publicité peut gêner sur cet appareil. Réessaie, ou fais le test depuis ton téléphone.");
       const name = me.data.result.username;
       const up = await tgCall(token, "getUpdates");
       const chats = ((up.data && up.data.result) || []).map((u) => (u.message || u.edited_message || {}).chat).filter((c) => c && c.type === "private");
@@ -1065,6 +1066,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     } finally { btn.disabled = false; btn.textContent = "Vérifier et envoyer un test"; }
   }
   $("tgCheck").onclick = tgCheck;
+  $("tgToken").addEventListener("input", () => { $("tgOut").innerHTML = ""; });
   $("swDemo").onclick = () => { S.demo = !S.demo; store.set("demo", S.demo); applyMode(); toast(S.demo ? "Mode démo activé" : "Mode démo désactivé"); };
   $("swSound").onclick = () => { S.sound = !S.sound; store.set("sound", S.sound); $("swSound").classList.toggle("on", S.sound); if (S.sound) beep(); };
   $("swNotif").onclick = async () => {
