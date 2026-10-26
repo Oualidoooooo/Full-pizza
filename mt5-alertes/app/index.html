@@ -357,7 +357,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
       <p class="muted" style="font-size:13.5px;margin-bottom:12px">Reçois chaque pré-alerte, signal et résultat dans Telegram, même téléphone verrouillé.</p>
       <ol class="steps">
         <li>Dans Telegram, ouvre ton bot (celui créé avec <b>@BotFather</b>) et envoie <b>/start</b>.</li>
-        <li>Colle ici le jeton donné par BotFather, puis touche <b>Vérifier</b> : tu dois recevoir un message de test.</li>
+        <li>Dans Telegram, appuie longuement sur le message de BotFather qui contient le jeton › <b>Copier</b>. Colle-le ici (tout le message, c'est OK), puis touche <b>Vérifier</b> : tu dois recevoir un message de test.</li>
         <li>Dans MT5, paramètres du robot : <b>Telegram = true</b>, colle le même jeton dans <b>Telegram : token du bot</b> et laisse <b>chat id</b> vide : le robot le trouve tout seul.</li>
       </ol>
       <label class="field" style="margin-top:4px"><span>Jeton du bot</span>
@@ -1038,8 +1038,12 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
   const tgLink = (name) => name ? '<br><a class="mini-btn" style="margin-top:10px;text-decoration:none" href="https://t.me/' + encodeURIComponent(name) + '" target="_blank" rel="noopener">Ouvrir @' + esc(name) + " dans Telegram</a>" : "";
 
   async function tgCheck() {
-    const token = $("tgToken").value.trim();
-    if (!/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(token)) return tgShow("err", "Jeton invalide.</b><br>Copie-le en entier depuis BotFather : il ressemble à 123456789:AAH….");
+    // accepte aussi le message entier de BotFather : on en extrait le jeton
+    const raw = $("tgToken").value.trim(), found = raw.match(/\d{5,}:[A-Za-z0-9_-]{30,}/);
+    const token = found ? found[0] : raw;
+    if (found) $("tgToken").value = token;
+    if (!found && /^\d{5,}:?$/.test(raw)) return tgShow("err", "Il manque la fin du jeton.</b><br>Après les chiffres, il y a deux-points <b>:</b> puis une longue suite de lettres. Dans Telegram, <b>appuie longuement sur le message de BotFather › Copier</b>, puis colle tout le message ici : l'appli trouve le jeton toute seule.");
+    if (!found) return tgShow("err", "Jeton introuvable.</b><br>Dans Telegram, appuie longuement sur le message de BotFather qui contient le jeton › <b>Copier</b>, puis colle tout ici.");
     store.set("tgToken", token);
     const btn = $("tgCheck"); btn.disabled = true; btn.textContent = "Vérification…";
     try {
