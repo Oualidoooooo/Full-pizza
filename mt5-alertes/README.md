@@ -77,41 +77,36 @@ Un signal n'est envoyé que si **toutes** les conditions sont réunies :
 Personne ne peut connaître le marché à l'avance : la pré-alerte annonce un
 signal probable, pas certain. C'est pour ça qu'on attend la confirmation.
 
-Exemple de signal :
+Exemple de signal (Telegram, appli, notification) :
 
 ```
-🟢 ACHAT EURUSD MAINTENANT (H1)
-Entrée 1.08512 | SL 1.08197 | TP 1.09142 | Lot 0.31
-À prendre avant 14:15
-
-👉 QUOI FAIRE DANS MT5
-1. Cotations > EURUSD > Nouvel ordre
-2. Exécution au marché, volume 0.31
-3. Stop Loss : 1.08197
-4. Take Profit : 1.09142
-5. Touche ACHETER (Buy)
-
-💰 CE QUE TU RISQUES
-Stop Loss touché : -97.65 EUR (1.0 % du compte)
-Take Profit touché : +195.30 EUR (2.0 fois le risque)
-
-📍 LES PRIX
-Entrée : 1.08512 (prix actuel)
-Stop Loss : 1.08197 (31.5 pips plus bas)
-Take Profit : 1.09142 (63.0 pips plus haut)
-
-❓ POURQUOI
-- MM20 / MM50 : croisement à la hausse
-- Prix au-dessus de l'EMA 200 (tendance haussière)
-- Tendance haussière confirmée en H4
-- Tendance forte (ADX 27)
-
-⚠️ N'achète pas si le prix est déjà au-dessus de 1.08575 : le signal est passé.
-Ne déplace jamais ton Stop Loss.
-Je te préviens quand le TP ou le SL est touché.
+🔴 VENTE EURUSD (H1)
+------------------------------
+ • Entrée : 1.17387
+ • Stop Loss : 1.17555 (16.8 pips)
+ • Take Profit : 1.17051 (33.6 pips)
+ • Volume : 0.02 lot
+ • Si SL : -3.36 EUR | Si TP : +6.72 EUR
+------------------------------
+⏱ À prendre avant 14:15
+⚠️ Trop tard si le prix est en dessous de 1.17353
+📊 MM20 / MM50 : croisement à la baisse · Prix sous l'EMA 200 · Tendance forte (ADX 27)
 ```
 
-Les 3 premières lignes contiennent l'essentiel : c'est ce que tu vois dans une
+Quand tu ouvres ou fermes une position (même depuis ton téléphone, sur le même
+compte), tu reçois aussi :
+
+```
+📣 Position ouverte : EURUSD
+------------------------------
+ • Volume : 0.02 lot
+ • Take Profit : 1.17051
+ • Stop Loss : 1.17555
+🔻 VENTE | 1.17387
+------------------------------
+```
+
+Les premières lignes contiennent l'essentiel : c'est ce que tu vois dans une
 notification push (limitée à 255 caractères). Le message complet arrive sur
 Telegram et dans l'appli.
 

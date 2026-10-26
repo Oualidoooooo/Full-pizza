@@ -815,7 +815,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
     const list = msgs.filter((m) => S.feedFilter === "all" || m.kind === S.feedFilter);
     $("feed").innerHTML = list.length ? list.map((m) => {
       const loss = (m.kind === "trade" && num(m.d.profit) < 0) || (m.kind === "result" && num(m.d.r) <= 0);
-      const body = m.message.split("\n").slice(m.message.indexOf("\n") > 0 ? 1 : 0).join("\n");
+      const body = m.message.split("\n").slice(m.message.indexOf("\n") > 0 ? 1 : 0).filter((l) => !/^-{5,}$/.test(l.trim())).join("\n");
       const text = body === m.title ? "" : body;
       return '<div class="it"><div class="ic ' + esc(m.kind) + (loss ? " loss" : "") + '">' + icon(m.kind) + '</div><div class="it-body"><div class="it-title"><span>' + esc(m.title) + "</span><time>" + hhmm(m.time) + "</time></div>" +
         (text ? '<div class="it-text">' + esc(text) + "</div>" : "") + "</div></div>";
@@ -933,40 +933,41 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--bg2);padding:2px 
       if (k === 0) tags.push("st=14|7|5.20|14.00|8.80", "o=EURUSD-1|EURUSD|buy|1.08512|1.08197|1.09142", "p=EURUSD|buy|0.31|98.20|1", "p=XAUUSD|buy|0.05|44.40|1");
       out.push(mk(k * 900 + 30, "status", "Statut", "Mise à jour du compte", tags));
     }
+    const SEP = "------------------------------";
     const sig = (ago, sid, side, sym, reasons, entry, sl, tp, slp, tpp, lot, risk, lim) => {
-      const buy = side === "buy", until = now - ago + 15 * 60;
-      const msg = (buy ? "🟢 ACHAT " : "🔴 VENTE ") + sym + " MAINTENANT (H1)\nEntrée " + entry + " | SL " + sl + " | TP " + tp + " | Lot " + lot +
-        "\nÀ prendre avant " + hhmm(until) + "\n\n👉 QUOI FAIRE DANS MT5\n1. Cotations > " + sym + " > Nouvel ordre\n2. Exécution au marché, volume " + lot +
-        "\n3. Stop Loss : " + sl + "\n4. Take Profit : " + tp + "\n5. Touche " + (buy ? "ACHETER (Buy)" : "VENDRE (Sell)") +
-        "\n\n💰 CE QUE TU RISQUES\nStop Loss touché : -" + risk + " EUR (1.0 % du compte)\nTake Profit touché : +" + (2 * risk).toFixed(2) + " EUR (2.0 fois le risque)" +
-        "\n\n📍 LES PRIX\nEntrée : " + entry + " (prix actuel)\nStop Loss : " + sl + " (" + slp + " pips " + (buy ? "plus bas" : "plus haut") + ")\nTake Profit : " + tp + " (" + tpp + " pips " + (buy ? "plus haut" : "plus bas") + ")" +
-        "\n\n❓ POURQUOI\n- " + reasons.join("\n- ") + "\n\n⚠️ " + (buy ? "N'achète pas si le prix est déjà au-dessus de " : "Ne vends pas si le prix est déjà en dessous de ") + lim +
-        " : le signal est passé.\nNe déplace jamais ton Stop Loss.\nJe te préviens quand le TP ou le SL est touché.";
+      const buy = side === "buy", until = now - ago + 15 * 60, why = reasons.join(" · ");
+      const msg = (buy ? "🟢 ACHAT " : "🔴 VENTE ") + sym + " (H1)\n" + SEP + "\n • Entrée : " + entry + "\n • Stop Loss : " + sl + " (" + slp + " pips)\n • Take Profit : " + tp + " (" + tpp + " pips)" +
+        "\n • Volume : " + lot + " lot\n • Si SL : -" + risk + " EUR | Si TP : +" + (2 * risk).toFixed(2) + " EUR\n" + SEP +
+        "\n⏱ À prendre avant " + hhmm(until) + "\n⚠️ Trop tard si le prix est " + (buy ? "au-dessus de " : "en dessous de ") + lim + "\n📊 " + why;
       return mk(ago, "signal", msg.split("\n")[0], msg, ["sid=" + sid, "exp=48", "sym=" + sym, "side=" + side, "tf=H1", "entry=" + entry, "sl=" + sl, "tp=" + tp, "lim=" + lim,
-        "slp=" + slp, "tpp=" + tpp, "lot=" + lot, "risk=" + risk, "cur=EUR", "rr=2.0", "vu=" + until, "rs=" + reasons.join(" · ").replace(/,/g, ";")]);
+        "slp=" + slp, "tpp=" + tpp, "lot=" + lot, "risk=" + risk, "cur=EUR", "rr=2.0", "vu=" + until, "rs=" + why.replace(/,/g, ";")]);
     };
     const pre = (ago, side, sym, inSec) => {
-      const at = now - ago + inSec, txt = (side === "buy" ? "ACHAT " : "VENTE ") + sym;
-      return mk(ago, "pre", "⏳ PRÉPARE-TOI : " + txt + " possible à " + hhmm(at) + " (dans 1 min)",
-        "⏳ PRÉPARE-TOI : " + txt + " possible à " + hhmm(at) + " (dans 1 min)\nOuvre MT5 sur " + sym + " maintenant.\nJe confirme à la clôture de la bougie avec l'entrée, le Stop Loss, le Take Profit et le lot.\nN'entre pas avant la confirmation : le signal peut encore s'annuler.",
-        ["sym=" + sym, "side=" + side, "ev=pre", "at=" + at, "tf=H1"]);
+      const at = now - ago + inSec;
+      const msg = "⏳ PRÉPARE-TOI : " + sym + "\n" + SEP + "\n • " + (side === "buy" ? "ACHAT" : "VENTE") + " possible à " + hhmm(at) + " (dans 1 min)\n • Ouvre MT5 sur " + sym + " maintenant\n • Attends la confirmation avant d'entrer\n" + SEP;
+      return mk(ago, "pre", msg.split("\n")[0], msg, ["sym=" + sym, "side=" + side, "ev=pre", "at=" + at, "tf=H1"]);
     };
-    const res = (ago, sid, side, sym, kind, r, entry, exit, st) => mk(ago, "result",
-      (kind === "tp" ? "TAKE PROFIT TOUCHÉ" : kind === "sl" ? "STOP LOSS TOUCHÉ" : "SIGNAL EXPIRÉ") + " : " + (side === "buy" ? "ACHAT " : "VENTE ") + sym,
-      (kind === "tp" ? "TAKE PROFIT TOUCHÉ" : kind === "sl" ? "STOP LOSS TOUCHÉ" : "SIGNAL EXPIRÉ") + " : " + (side === "buy" ? "ACHAT " : "VENTE ") + sym + "\nEntrée " + entry + " -> sortie " + exit + "\nRésultat " + (r > 0 ? "+" : "") + r.toFixed(2) + " R",
-      ["sid=" + sid, "sym=" + sym, "side=" + side, "res=" + kind, "r=" + r.toFixed(2), "exit=" + exit, "st=" + st]);
+    const res = (ago, sid, side, sym, kind, r, entry, exit, st, money) => {
+      const head = kind === "tp" ? "✅ TAKE PROFIT : " : kind === "sl" ? "❌ STOP LOSS : " : "⌛ EXPIRÉ : ";
+      const [n, w, tot] = st.split("|");
+      const msg = head + sym + "\n" + SEP + "\n • " + (side === "buy" ? "ACHAT" : "VENTE") + " à " + entry + "\n • Sortie : " + exit + "\n • Résultat : " + (r > 0 ? "+" : "") + r.toFixed(2) + " R (" + (money > 0 ? "+" : "") + money.toFixed(2) + " EUR)\n" + SEP +
+        "\n📊 Bilan des signaux : " + n + " terminés, " + Math.round(w / n * 100) + " % gagnants, " + (tot > 0 ? "+" : "") + Number(tot).toFixed(1) + " R au total.";
+      return mk(ago, "result", msg.split("\n")[0], msg, ["sid=" + sid, "sym=" + sym, "side=" + side, "res=" + kind, "r=" + r.toFixed(2), "exit=" + exit, "st=" + st]);
+    };
+    const trade = (ago, title, lines, tags) => mk(ago, "trade", title, title + "\n" + SEP + "\n" + lines.join("\n") + "\n" + SEP, tags);
     out.push(
       pre(20, "buy", "GBPUSD", 60),
       sig(40, "EURUSD-1", "buy", "EURUSD", ["MM20 / MM50 : croisement à la hausse", "Prix au-dessus de l'EMA 200 (tendance haussière)", "Tendance haussière confirmée en H4", "Tendance forte (ADX 27)"], "1.08512", "1.08197", "1.09142", "31.5", "63.0", "0.31", "97.65", "1.08575"),
       pre(100, "buy", "EURUSD", 60),
       mk(1500, "news", "ANNONCE FORTE dans 30 min : USD - Nonfarm Payrolls", "ANNONCE FORTE dans 30 min : USD - Nonfarm Payrolls\nLe marché peut bouger fort. Évite d'entrer juste avant et vérifie tes stops sur USD.", ["cur=USD", "min=30"]),
-      res(3000, "USDJPY-1", "sell", "USDJPY", "tp", 2, "149.682", "149.042", "14|7|5.20|14.00|8.80"),
+      res(3000, "USDJPY-1", "sell", "USDJPY", "tp", 2, "149.682", "149.042", "14|7|5.20|14.00|8.80", 197.80),
       sig(16000, "USDJPY-1", "sell", "USDJPY", ["RSI qui redescend du surachat (68) : fin du rebond", "Prix sous l'EMA 200 (tendance baissière)", "Tendance baissière confirmée en H4", "Tendance forte (ADX 31)"], "149.682", "150.002", "149.042", "32.0", "64.0", "0.46", "98.90", "149.618"),
-      res(30000, "GBPUSD-1", "buy", "GBPUSD", "sl", -1, "1.27410", "1.27050", "13|6|3.20|12.00|8.80"),
+      res(30000, "GBPUSD-1", "buy", "GBPUSD", "sl", -1, "1.27410", "1.27050", "13|6|3.20|12.00|8.80", -97.20),
       sig(52000, "GBPUSD-1", "buy", "GBPUSD", ["MM20 / MM50 : croisement à la hausse", "Prix au-dessus de l'EMA 200 (tendance haussière)", "Tendance haussière confirmée en H4", "Tendance forte (ADX 23)"], "1.27410", "1.27050", "1.28130", "36.0", "72.0", "0.27", "97.20", "1.27482"),
-      res(70000, "XAUUSD-1", "buy", "XAUUSD", "tp", 2, "2331.40", "2363.40", "12|6|4.20|12.00|7.80"),
+      res(70000, "XAUUSD-1", "buy", "XAUUSD", "tp", 2, "2331.40", "2363.40", "12|6|4.20|12.00|7.80", 192.00),
       sig(98000, "XAUUSD-1", "buy", "XAUUSD", ["RSI qui remonte de la survente (34) : fin du repli", "Prix au-dessus de l'EMA 200 (tendance haussière)", "Tendance haussière confirmée en H4", "Tendance forte (ADX 29)"], "2331.40", "2315.40", "2363.40", "1600.0", "3200.0", "0.06", "96.00", "2334.60"),
-      mk(7200, "trade", "Position fermée (Take Profit) : GBPUSD 0.25 lot à 1.27480  Résultat +142.30 EUR", "Position fermée (Take Profit) : GBPUSD 0.25 lot à 1.27480  Résultat +142.30 EUR", ["sym=GBPUSD", "ev=close", "why=Take Profit", "profit=142.30"]),
+      trade(7200, "🏁 Position fermée : GBPUSD", [" • Raison : Take Profit", " • Volume : 0.25 lot", " • Prix : 1.27480", "✅ Résultat : +142.30 EUR"], ["sym=GBPUSD", "ev=close", "why=Take Profit", "profit=142.30"]),
+      trade(15, "📣 Position ouverte : EURUSD", [" • Volume : 0.31 lot", " • Take Profit : 1.09142", " • Stop Loss : 1.08197", "🔷 ACHAT | 1.08515"], ["sym=EURUSD", "side=buy", "ev=open"]),
       mk(9000, "line", "EURUSD : prix monte au-dessus de 1.08400 (ligne ALERTE resistance)", "EURUSD : prix monte au-dessus de 1.08400 (ligne ALERTE resistance)", ["sym=EURUSD"]),
       mk(14000, "account", "Position SANS stop loss : XAUUSD 0.05 lot (ticket 51234). Place un stop.", "Position SANS stop loss : XAUUSD 0.05 lot (ticket 51234). Place un stop.", ["sym=XAUUSD"]),
       mk(20000, "summary", "RÉSUMÉ DU MARCHÉ H1", "RÉSUMÉ DU MARCHÉ H1\nEURUSD : hausse, RSI 55, ATR 14.6 pips\nGBPUSD : hausse, RSI 61, ATR 18.2 pips\nUSDJPY : baisse, RSI 44, ATR 20.9 pips\nXAUUSD : hausse, RSI 68, ATR 262.0 pips\nAnnonces fortes (24 h) : 2\n- USD Nonfarm Payrolls (dans 330 min)\n- USD Unemployment Rate (dans 330 min)\nBilan des signaux : 14 terminés, 50 % gagnants, +5.2 R au total."),

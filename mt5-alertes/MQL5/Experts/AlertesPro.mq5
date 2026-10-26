@@ -14,7 +14,7 @@
 //|  Le robot ne passe AUCUN ordre : il surveille et il prévient.    |
 //+------------------------------------------------------------------+
 #property copyright "AlertesPro"
-#property version   "1.41"
+#property version   "1.50"
 #property description "Signaux avec stop loss / take profit / lot, suivi des résultats, calendrier économique, résumé du matin."
 #property description "Ne passe aucun ordre. Teste d'abord sur un compte démo."
 
@@ -132,6 +132,7 @@ struct Track
    double            sl;
    double            tp;
    datetime          opened;
+   double            risk;     // argent risqué (lot conseillé), 0 si inconnu
   };
 
 SymState g_syms[];
@@ -143,6 +144,7 @@ double   g_statGrossW = 0.0;   // somme des R gagnants
 double   g_statGrossL = 0.0;   // somme des R perdants (valeur positive)
 const string JOURNAL_FILE = "AlertesPro_journal.csv";
 const string TG_FILE      = "AlertesPro_telegram.txt";
+const string SEP          = "------------------------------";
 string   g_tgChat    = "";   // chat id trouvé automatiquement
 datetime g_tgLastTry = 0;
 string   g_coolKeys[];
@@ -753,7 +755,8 @@ void SaveJournal()
       FileWriteString(h, "OPEN;" + g_tracks[i].sid + ";" + g_tracks[i].sym + ";" +
                       (g_tracks[i].buy ? "buy" : "sell") + ";" +
                       DoubleToString(g_tracks[i].entry, dg) + ";" + DoubleToString(g_tracks[i].sl, dg) + ";" +
-                      DoubleToString(g_tracks[i].tp, dg) + ";" + IntegerToString((long)g_tracks[i].opened) + "\r\n");
+                      DoubleToString(g_tracks[i].tp, dg) + ";" + IntegerToString((long)g_tracks[i].opened) + ";" +
+                      DoubleToString(g_tracks[i].risk, 2) + "\r\n");
      }
    FileClose(h);
   }
@@ -790,12 +793,13 @@ void LoadJournal()
          g_tracks[k].sl     = StringToDouble(f[5]);
          g_tracks[k].tp     = StringToDouble(f[6]);
          g_tracks[k].opened = (datetime)StringToInteger(f[7]);
+         g_tracks[k].risk   = (n >= 9) ? StringToDouble(f[8]) : 0.0;
         }
      }
    FileClose(h);
   }
 
-void AddTrack(const string sid, const string sym, const bool buy, const double entry, const double sl, const double tp)
+void AddTrack(const string sid, const string sym, const bool buy, const double entry, const double sl, const double tp, const double risk)
   {
    if(!InpTrack)
       return;
@@ -808,6 +812,7 @@ void AddTrack(const string sid, const string sym, const bool buy, const double e
    g_tracks[k].sl     = sl;
    g_tracks[k].tp     = tp;
    g_tracks[k].opened = TimeCurrent();
+   g_tracks[k].risk   = risk;
    SaveJournal();
   }
 
@@ -835,11 +840,15 @@ void CloseTrack(const int idx, const string res, const double exitPx)
    ArrayResize(g_tracks, n - 1);
    SaveJournal();
 
-   string what = (res == "tp") ? "TAKE PROFIT TOUCHÉ" : (res == "sl") ? "STOP LOSS TOUCHÉ" : "SIGNAL EXPIRÉ";
-   string side = t.buy ? "ACHAT " : "VENTE ";
-   string msg = what + " : " + side + t.sym + "\n" +
-                "Entrée " + Px(t.sym, t.entry) + " -> sortie " + Px(t.sym, exitPx) + "\n" +
-                "Résultat " + (r >= 0 ? "+" : "") + DoubleToString(r, 2) + " R\n" + StatsText();
+   string head = (res == "tp") ? "✅ TAKE PROFIT : " : (res == "sl") ? "❌ STOP LOSS : " : "⌛ EXPIRÉ : ";
+   string side = t.buy ? "ACHAT" : "VENTE";
+   string msg = head + t.sym + "\n" + SEP + "\n";
+   msg += " • " + side + " à " + Px(t.sym, t.entry) + "\n";
+   msg += " • Sortie : " + Px(t.sym, exitPx) + "\n";
+   msg += " • Résultat : " + (r >= 0 ? "+" : "") + DoubleToString(r, 2) + " R";
+   if(t.risk > 0)
+      msg += " (" + Money(r * t.risk) + ")";
+   msg += "\n" + SEP + "\n📊 " + StatsText();
    string tags = "sid=" + t.sid + ",sym=" + t.sym + ",side=" + (t.buy ? "buy" : "sell") + ",res=" + res +
                  ",r=" + DoubleToString(r, 2) + ",exit=" + Px(t.sym, exitPx) + "," + StatsTag();
    if(InpResultAlerts)
@@ -967,47 +976,31 @@ bool SendSignal(const string sym, const bool buy, const string reason, const dou
    int    validMin  = (int)MathMax(1, InpValidMin);
    datetime until   = TimeLocal() + validMin * 60;
 
-   //--- 3 premières lignes : l'essentiel (visible dans une notification)
-   string msg = (buy ? "🟢 ACHAT " : "🔴 VENTE ") + sym + " MAINTENANT (" + tf + ")\n";
-   msg += "Entrée " + Px(sym, entry) + " | SL " + Px(sym, sl) + " | TP " + Px(sym, tp);
-   if(lots > 0)
-      msg += " | Lot " + lotTxt;
-   msg += "\nÀ prendre avant " + TimeToString(until, TIME_MINUTES) + "\n\n";
+   string why = reason;
+   StringReplace(why, "\n- ", " · ");
 
+   string msg = (buy ? "🟢 ACHAT " : "🔴 VENTE ") + sym + " (" + tf + ")\n" + SEP + "\n";
+   msg += " • Entrée : " + Px(sym, entry) + "\n";
+   msg += " • Stop Loss : " + Px(sym, sl) + " (" + Pips(sym, dist) + ")\n";
+   msg += " • Take Profit : " + Px(sym, tp) + " (" + Pips(sym, dist * InpRR) + ")\n";
    if(lots > 0)
      {
-      msg += "👉 QUOI FAIRE DANS MT5\n";
-      msg += "1. Cotations > " + sym + " > Nouvel ordre\n";
-      msg += "2. Exécution au marché, volume " + lotTxt + "\n";
-      msg += "3. Stop Loss : " + Px(sym, sl) + "\n";
-      msg += "4. Take Profit : " + Px(sym, tp) + "\n";
-      msg += "5. Touche " + (buy ? "ACHETER (Buy)" : "VENDRE (Sell)") + "\n\n";
-      msg += "💰 CE QUE TU RISQUES\n";
-      msg += "Stop Loss touché : -" + DoubleToString(realRisk, 2) + " " + cur + " (" + DoubleToString(InpRiskPct, 1) + " % du compte)\n";
-      msg += "Take Profit touché : +" + DoubleToString(realRisk * InpRR, 2) + " " + cur + " (" + DoubleToString(InpRR, 1) + " fois le risque)\n\n";
+      msg += " • Volume : " + lotTxt + " lot\n";
+      msg += " • Si SL : -" + DoubleToString(realRisk, 2) + " " + cur + " | Si TP : +" + DoubleToString(realRisk * InpRR, 2) + " " + cur + "\n";
      }
    else
-      msg += "⛔ NE PRENDS PAS CE TRADE : même le lot minimum risquerait plus de " +
-             DoubleToString(InpRiskPct, 1) + " % de ton compte.\n\n";
-
-   msg += "📍 LES PRIX\n";
-   msg += "Entrée : " + Px(sym, entry) + " (prix actuel)\n";
-   msg += "Stop Loss : " + Px(sym, sl) + " (" + Pips(sym, dist) + (buy ? " plus bas" : " plus haut") + ")\n";
-   msg += "Take Profit : " + Px(sym, tp) + " (" + Pips(sym, dist * InpRR) + (buy ? " plus haut" : " plus bas") + ")\n\n";
-   msg += "❓ POURQUOI\n- " + reason + "\n\n";
-   msg += "⚠️ " + (buy ? "N'achète pas si le prix est déjà au-dessus de " : "Ne vends pas si le prix est déjà en dessous de ") +
-          Px(sym, limit) + " : le signal est passé.\n";
-   msg += "Ne déplace jamais ton Stop Loss.";
+      msg += " • Volume : ⛔ lot minimum trop gros pour ton compte, passe ton tour\n";
+   msg += SEP + "\n";
+   msg += "⏱ À prendre avant " + TimeToString(until, TIME_MINUTES) + "\n";
+   msg += "⚠️ Trop tard si le prix est " + (buy ? "au-dessus de " : "en dessous de ") + Px(sym, limit) + "\n";
+   msg += "📊 " + why;
    if(newsNear)
-      msg += "\nAttention annonce : " + news;
+      msg += "\n📰 Annonce proche : " + news;
 
    string sid = sym + "-" + IntegerToString((long)iTime(sym, InpTimeframe, 0));
-   if(InpTrack)
-      msg += "\nJe te préviens quand le TP ou le SL est touché.";
 
    //--- données pour l'appli (pas de virgule dans les valeurs)
-   string rs = reason;
-   StringReplace(rs, "\n- ", " · ");
+   string rs = why;
    StringReplace(rs, ",", ";");
    string tags = "sid=" + sid + ",exp=" + IntegerToString(InpExpireBars) + ",sym=" + sym + ",side=" + (buy ? "buy" : "sell") + ",tf=" + tf +
                  ",entry=" + DoubleToString(entry, dg) + ",sl=" + DoubleToString(sl, dg) +
@@ -1018,7 +1011,7 @@ bool SendSignal(const string sym, const bool buy, const string reason, const dou
                  ",cur=" + cur + ",rr=" + DoubleToString(InpRR, 1) +
                  ",vu=" + IntegerToString((long)(TimeGMT() + validMin * 60)) + ",rs=" + rs;
    Notify(msg, "signal", tags);
-   AddTrack(sid, sym, buy, entry, sl, tp);
+   AddTrack(sid, sym, buy, entry, sl, tp, lots > 0 ? realRisk : 0.0);
    return true;
   }
 
@@ -1131,11 +1124,10 @@ void CheckPreAlert(SymState &st)
    st.preBar = bar;
    datetime closeAt = TimeLocal() + left;
    string side = buy ? "ACHAT" : "VENTE";
-   string msg = "⏳ PRÉPARE-TOI : " + side + " " + st.name + " possible à " + TimeToString(closeAt, TIME_MINUTES) +
-                " (dans " + SecondsText(left) + ")\n" +
-                "Ouvre MT5 sur " + st.name + " maintenant.\n" +
-                "Je confirme à la clôture de la bougie avec l'entrée, le Stop Loss, le Take Profit et le lot.\n" +
-                "N'entre pas avant la confirmation : le signal peut encore s'annuler.";
+   string msg = "⏳ PRÉPARE-TOI : " + st.name + "\n" + SEP + "\n";
+   msg += " • " + side + " possible à " + TimeToString(closeAt, TIME_MINUTES) + " (dans " + SecondsText(left) + ")\n";
+   msg += " • Ouvre MT5 sur " + st.name + " maintenant\n";
+   msg += " • Attends la confirmation avant d'entrer\n" + SEP;
    Notify(msg, "pre", "sym=" + st.name + ",side=" + (buy ? "buy" : "sell") + ",ev=pre,at=" +
           IntegerToString((long)(TimeGMT() + left)) + ",tf=" + TfName(InpTimeframe));
   }
@@ -1179,7 +1171,7 @@ void CheckSymbol(SymState &st)
    if(st.preBar != 0)
      {
       if(st.preBar == iTime(st.name, InpTimeframe, 1) && !sent)
-         Notify("✖ PRÉ-ALERTE ANNULÉE : " + st.name + "\nÀ la clôture de la bougie, les conditions ne sont plus réunies. Ne fais rien.",
+         Notify("✖ ANNULÉ : " + st.name + "\n" + SEP + "\n • Les conditions ne sont plus réunies\n • Ne fais rien\n" + SEP,
                 "pre", "sym=" + st.name + ",ev=cancel");
       st.preBar = 0;
      }
@@ -1464,9 +1456,23 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
 
    if(entry == DEAL_ENTRY_IN)
      {
-      Notify("Position ouverte : " + (type == DEAL_TYPE_BUY ? "ACHAT " : "VENTE ") +
-             sym + " " + lots + " à " + Px(sym, price), "trade",
-             "sym=" + sym + ",side=" + (type == DEAL_TYPE_BUY ? "buy" : "sell") + ",ev=open");
+      bool   isBuy = (type == DEAL_TYPE_BUY);
+      double dsl   = HistoryDealGetDouble(trans.deal, DEAL_SL);
+      double dtp   = HistoryDealGetDouble(trans.deal, DEAL_TP);
+      ulong  posId = (ulong)HistoryDealGetInteger(trans.deal, DEAL_POSITION_ID);
+      if((dsl == 0 || dtp == 0) && PositionSelectByTicket(posId))
+        {
+         if(dsl == 0)
+            dsl = PositionGetDouble(POSITION_SL);
+         if(dtp == 0)
+            dtp = PositionGetDouble(POSITION_TP);
+        }
+      string msg = "📣 Position ouverte : " + sym + "\n" + SEP + "\n";
+      msg += " • Volume : " + lots + "\n";
+      msg += " • Take Profit : " + (dtp > 0 ? Px(sym, dtp) : "non défini") + "\n";
+      msg += " • Stop Loss : " + (dsl > 0 ? Px(sym, dsl) : "⚠️ non défini") + "\n";
+      msg += (isBuy ? "🔷 ACHAT | " : "🔻 VENTE | ") + Px(sym, price) + "\n" + SEP;
+      Notify(msg, "trade", "sym=" + sym + ",side=" + (isBuy ? "buy" : "sell") + ",ev=open");
       return;
      }
 
@@ -1483,8 +1489,12 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
    else if(reason == DEAL_REASON_EXPERT)
       why = "robot";
 
-   Notify("Position fermée (" + why + ") : " + sym + " " + lots + " à " + Px(sym, price) +
-          "  Résultat " + Money(profit), "trade",
+   string msg = "🏁 Position fermée : " + sym + "\n" + SEP + "\n";
+   msg += " • Raison : " + why + "\n";
+   msg += " • Volume : " + lots + "\n";
+   msg += " • Prix : " + Px(sym, price) + "\n";
+   msg += (profit >= 0 ? "✅ Résultat : " : "❌ Résultat : ") + Money(profit) + "\n" + SEP;
+   Notify(msg, "trade",
           "sym=" + sym + ",ev=close,why=" + why + ",profit=" + DoubleToString(profit, 2));
   }
 
