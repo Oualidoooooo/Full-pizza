@@ -25,3 +25,8 @@ Toutes les données sont des exemples. Les prix et règles marqués « à confir
 4. Livraison et fonctions patron
 5. Pages légales et sécurité
 6. Mise en ligne sur Vercel
+
+## Autre projet : AlertesPro (MetaTrader 5)
+
+Robot d'alertes de trading et son appli : voir [`mt5-alertes/`](mt5-alertes/README.md).
+Appli : https://oualidoooooo.github.io/Full-pizza/mt5-alertes/app/
