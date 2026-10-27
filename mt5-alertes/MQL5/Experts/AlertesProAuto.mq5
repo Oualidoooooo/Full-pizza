@@ -7,11 +7,12 @@
 //|    calculé pour ton capital et ta perte max)                     |
 //|  - ouvre l'ordre avec Stop Loss et TP2                           |
 //|  - à TP1 : ferme la moitié et met le Stop Loss au prix d'entrée  |
+//|  - le soir (21 h, Paris) : ferme ce qui reste ouvert              |
 //+------------------------------------------------------------------+
 #property copyright "AlertesPro"
-#property version   "1.00"
+#property version   "1.10"
 #property description "Passe tout seul les ordres des signaux AlertesPro, seulement sur un compte DÉMO."
-#property description "À TP1 : ferme la moitié et met le Stop Loss au prix d'entrée."
+#property description "À TP1 : ferme la moitié et met le Stop Loss au prix d'entrée. À 21 h : ferme ce qui reste."
 
 #include <Trade/Trade.mqh>
 
@@ -28,6 +29,7 @@ const string STATE_FILE = "AlertesProAuto_etat.txt";
 CTrade   trade;
 string   g_token    = "";
 string   g_done     = ",";      // signaux déjà traités (",id,id,")
+string   g_shut     = ",";      // fermetures déjà faites (",id,id,")
 datetime g_lastPoll = 0;
 datetime g_lastLogin = 0;
 string   g_info     = "Démarrage...";
@@ -72,7 +74,7 @@ void WriteText(const string file, const string text)
 
 void SaveState()
   {
-   string s = "DONE;" + g_done + "\n";
+   string s = "DONE;" + g_done + "\n" + "SHUT;" + g_shut + "\n";
    for(int i = 0; i < ArraySize(g_pos); i++)
       s += "POS;" + g_pos[i].id + ";" + IntegerToString((long)g_pos[i].ticket) + ";" +
            DoubleToString(g_pos[i].tp1, 8) + ";" + DoubleToString(g_pos[i].half, 2) + ";" + IntegerToString(g_pos[i].state) + "\n";
@@ -90,6 +92,8 @@ void LoadState()
       int k = StringSplit(lines[i], ';', f);
       if(k >= 2 && f[0] == "DONE")
          g_done = f[1];
+      else if(k >= 2 && f[0] == "SHUT")
+         g_shut = f[1];
       else if(k >= 6 && f[0] == "POS")
         {
          int j = ArraySize(g_pos);
@@ -103,6 +107,8 @@ void LoadState()
      }
    if(StringLen(g_done) > 3000) // garde seulement les derniers
       g_done = "," + StringSubstr(g_done, StringLen(g_done) - 2000);
+   if(StringLen(g_shut) > 3000)
+      g_shut = "," + StringSubstr(g_shut, StringLen(g_shut) - 2000);
   }
 
 //+------------------------------------------------------------------+
@@ -381,6 +387,38 @@ void ManagePositions()
   }
 
 //+------------------------------------------------------------------+
+//| Fermer le trade d'un signal (fin de journée)  C|id               |
+//+------------------------------------------------------------------+
+void CloseSignal(const string id)
+  {
+   g_shut += id + ",";
+   SaveState();
+   ulong ident = 0;
+   for(int i = 0; i < ArraySize(g_pos); i++)
+      if(g_pos[i].id == id)
+         ident = g_pos[i].ticket;
+   string comment = "AlertesPro " + id;
+   trade.SetExpertMagicNumber(MAGIC);
+   trade.SetDeviationInPoints(InpSlippage);
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0 || PositionGetInteger(POSITION_MAGIC) != MAGIC)
+         continue;
+      bool mine = (PositionGetString(POSITION_COMMENT) == comment) ||
+                  (ident > 0 && (ulong)PositionGetInteger(POSITION_IDENTIFIER) == ident);
+      if(!mine)
+         continue;
+      string sym = PositionGetString(POSITION_SYMBOL);
+      trade.SetTypeFillingBySymbol(sym);
+      if(trade.PositionClose(ticket))
+         Print("AlertesPro Auto : fin de journée, trade ", sym, " fermé.");
+      else
+         Print("AlertesPro Auto : impossible de fermer ", sym, " (", trade.ResultRetcode(), " ", trade.ResultRetcodeDescription(), ").");
+     }
+  }
+
+//+------------------------------------------------------------------+
 //| Récupérer les signaux                                            |
 //+------------------------------------------------------------------+
 void Poll()
@@ -410,7 +448,14 @@ void Poll()
    for(int i = 0; i < n; i++)
      {
       string f[];
-      if(StringSplit(lines[i], '|', f) < 14 || f[0] != "S")
+      int nf = StringSplit(lines[i], '|', f);
+      if(nf >= 2 && f[0] == "C")
+        {
+         if(StringFind(g_shut, "," + f[1] + ",") < 0)
+            CloseSignal(f[1]);
+         continue;
+        }
+      if(nf < 14 || f[0] != "S")
          continue;
       if(StringFind(g_done, "," + f[1] + ",") >= 0)
          continue;

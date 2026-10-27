@@ -14,7 +14,7 @@
 //    Secret facultatif           :  ROBOT_KEY (sinon calculée depuis TG_TOKEN)
 // =====================================================================
 
-const VERSION = "1.0";
+const VERSION = "1.1";
 const APP_URL = "https://oualidoooooo.github.io/Full-pizza/mt5-alertes/app/";
 const TZ = "Europe/Paris";
 
@@ -173,6 +173,10 @@ async function ensureSchema(env) {
   if (schemaReady) return;
   if (!env.DB) throw new Error("Base D1 non reliée (liaison « DB » manquante)");
   await env.DB.exec(SCHEMA);
+  // colonnes ajoutées après coup (erreur ignorée si elles existent déjà)
+  for (const sql of ["ALTER TABLE users ADD COLUMN sensei INTEGER NOT NULL DEFAULT 0"]) {
+    try { await env.DB.prepare(sql).run(); } catch (e) {}
+  }
   schemaReady = true;
 }
 async function kvGet(env, k) {
@@ -272,6 +276,7 @@ async function registerBot(env, origin) {
     { command: "marches", description: "Ce que je risque et peux gagner sur chaque marché" },
     { command: "capital", description: "Changer mon capital (ex. /capital 1500)" },
     { command: "risque", description: "Risque par trade en % du capital" },
+    { command: "sensei", description: "Mode El Sensei : 1 seul trade par jour (oui / non)" },
     { command: "pause", description: "Ne plus recevoir de signaux" },
     { command: "reprendre", description: "Recevoir de nouveau les signaux" },
     { command: "aide", description: "Liste des commandes" },
@@ -356,7 +361,7 @@ function publicUser(u, bot) {
   return {
     id: u.id, name: u.name, email: u.email, capital: u.capital, riskPct: u.risk_pct, admin: !!u.is_admin,
     riskMoney: round2(u.capital * u.risk_pct / 100), dailyStop: round2(dailyStopMoney(u)),
-    markets: u.markets === "*" ? "*" : u.markets.split(",").filter(Boolean), paused: !!u.paused,
+    markets: u.markets === "*" ? "*" : u.markets.split(",").filter(Boolean), paused: !!u.paused, sensei: !!u.sensei,
     telegram: u.tg_chat ? { linked: true, name: u.tg_name || "" } : { linked: false },
     linkCode: u.link_code, linkUrl: bot ? "https://t.me/" + bot + "?start=" + u.link_code : "",
     stoppedUntil: u.stopped_until > now() ? u.stopped_until : 0,
@@ -555,6 +560,7 @@ async function apiUpdateMe(env, u, body) {
     sets.push("markets = ?"); vals.push(list || "*");
   }
   if (body.paused != null) { sets.push("paused = ?"); vals.push(body.paused ? 1 : 0); }
+  if (body.sensei != null) { sets.push("sensei = ?"); vals.push(body.sensei ? 1 : 0); }
   if (sets.length) await env.DB.prepare("UPDATE users SET " + sets.join(", ") + " WHERE id = ?").bind(...vals, u.id).run();
   return json(await mePayload(env, await userById(env, u.id)));
 }
@@ -644,7 +650,9 @@ function signalMsg(a, s, u, cur) {
   L.push("Volume : <b>" + (sp ? sp.halfTxt + " + " + sp.restTxt : s.lotTxt) + " lot</b>", "");
   const gain = sp ? s.risk * (sp.f1 * a.r1 + (1 - sp.f1) * r2Of(a)) : two ? s.risk * a.r1 : s.gain;
   L.push("💸 Tu risques : <b>" + money(-s.risk, cur) + "</b>", "💰 Tu peux gagner : <b>" + money(gain, cur) + "</b>", "",
-    "⏱ À prendre avant <b>" + hhmm(a.vu) + "</b>", SEP);
+    "⏱ À prendre avant <b>" + hhmm(a.vu) + "</b>");
+  if (a.src === "cloud") L.push("🌙 Fermé à <b>" + String(CLOUD.closeHour).padStart(2, "0") + ":00</b> s'il n'est pas fini");
+  L.push(SEP);
   const act = buy ? "BUY" : "SELL";
   if (sp) L.push("📲 <b>Ouvre 2 ordres " + act + "</b> (SL " + px(a.sl, dg) + ") :",
     "① <b>" + sp.halfTxt + " lot</b> → TP <b>" + px(a.tp1, dg) + "</b>",
@@ -665,10 +673,11 @@ function statsLine(st, cur) {
 
 function resultMsg(ev, d, st, cur) {
   if (!(d.lot > 0)) return "ℹ️ " + esc(ev.sym) + " : le trade que tu as passé est terminé.";
-  const head = ev.res === "tp" ? "🚀 <b>GAGNÉ · " : ev.res === "sl" ? "❌ <b>PERDU · " : ev.res === "be" ? "🟡 <b>TERMINÉ · " : "⌛ <b>TERMINÉ · ";
+  const head = ev.res === "tp" ? "🚀 <b>GAGNÉ · " : ev.res === "sl" ? "❌ <b>PERDU · " : ev.res === "be" ? "🟡 <b>TERMINÉ · " : ev.res === "eod" ? "🌙 <b>FIN DE JOURNÉE · " : "⌛ <b>TERMINÉ · ";
   const L = [head + esc(ev.sym) + "</b>", SEP, "<b>" + money(d.money, cur) + "</b>"];
   if (ev.res === "be") L.push("Le reste est sorti à 0 : tu gardes le gain de TP1 👍");
-  if (ev.res !== "tp" && ev.res !== "sl" && ev.res !== "be") L.push("👉 Ferme ce trade dans MT5 s'il est encore ouvert.");
+  if (ev.res === "eod") L.push("👉 <b>Ferme ce trade dans MT5 maintenant.</b>", "On ne garde rien pendant la nuit.");
+  else if (ev.res !== "tp" && ev.res !== "sl" && ev.res !== "be") L.push("👉 Ferme ce trade dans MT5 s'il est encore ouvert.");
   L.push("", statsLine(st, cur));
   return L.join("\n");
 }
@@ -682,7 +691,7 @@ function profileMsg(u, st, cur, rr) {
     "🎯 Gain visé : environ <b>" + money(riskMoney * rr, cur, false) + "</b> par trade gagnant",
     "🛑 Stop du jour : après " + money(dailyStopMoney(u), cur, false) + " de pertes",
     "📈 Marchés : " + (u.markets === "*" ? "tous" : esc(u.markets.split(",").join(", "))),
-    "🔔 Alertes : " + state, SEP,
+    "🔔 Alertes : " + state + (u.sensei ? " · 🧘 mode El Sensei (1 par jour)" : ""), SEP,
     statsLine(st, cur),
     "📅 Aujourd'hui : " + money(st.today, cur) + " · ⏳ En cours : " + st.open].join("\n");
 }
@@ -707,6 +716,7 @@ const HELP = ["ℹ️ <b>Commandes</b>", SEP,
   "/marches : ce que tu risques et peux gagner sur chaque marché",
   "/capital 1500 : changer ton capital",
   "/risque 1 : risque par trade en % du capital",
+  "/sensei : mode El Sensei, 1 seul trade par jour (/sensei non pour l'enlever)",
   "/pause : ne plus recevoir de signaux",
   "/reprendre : recevoir de nouveau les signaux",
   "/aide : cette liste"].join("\n");
@@ -767,6 +777,12 @@ async function onTelegram(env, update) {
     await env.DB.prepare("UPDATE users SET paused = 1 WHERE id = ?").bind(user.id).run();
     return reply("⏸️ <b>Signaux en pause.</b>\nTu reçois quand même les résultats des trades en cours.\n/reprendre pour relancer.");
   }
+  if (cmd === "/sensei") {
+    const off = /^(non|off|0|stop)$/i.test(args[0] || "");
+    await env.DB.prepare("UPDATE users SET sensei = ? WHERE id = ?").bind(off ? 0 : 1, user.id).run();
+    return reply(off ? "🔔 <b>Mode El Sensei enlevé.</b>\nTu reçois de nouveau toutes les alertes (environ 4 par jour)."
+      : "🧘 <b>Mode El Sensei activé.</b>\n• <b>1 seul trade par jour</b> : après le 1er signal, plus rien jusqu'au lendemain.\n• <b>3 pertes dans la semaine</b> : pause jusqu'à lundi.\n\n/sensei non pour l'enlever.");
+  }
   if (cmd === "/reprendre") {
     await env.DB.prepare("UPDATE users SET paused = 0 WHERE id = ?").bind(user.id).run();
     return reply("▶️ <b>Signaux relancés.</b>" + (user.stopped_until > now() ? "\n🛑 Le stop du jour reste actif jusqu'à minuit." : ""));
@@ -808,6 +824,27 @@ async function openCounts(env) {
   return new Map(rows.map((r) => [r.user_id, r.n]));
 }
 
+// Mode El Sensei : 1 seul trade par jour, et pause jusqu'à lundi après 3 pertes dans la semaine
+function parisWeekStart(ts) {
+  const wd = String(parisParts(ts).weekday || "").toLowerCase().slice(0, 3);
+  const back = { lun: 0, mar: 1, mer: 2, jeu: 3, ven: 4, sam: 5, dim: 6 }[wd] || 0;
+  return parisDayStart(ts - back * 86400);
+}
+async function senseiBlocked(env, users, t) {
+  const ids = users.filter((u) => u.sensei).map((u) => u.id);
+  const out = new Map();
+  if (!ids.length) return out;
+  const day = parisDayStart(t), week = parisWeekStart(t);
+  const rows = (await env.DB.prepare("SELECT user_id, SUM(CASE WHEN created >= ? THEN 1 ELSE 0 END) AS today, SUM(CASE WHEN money < 0 THEN 1 ELSE 0 END) AS lost FROM deliveries WHERE kind = 'signal' AND lot > 0 AND created >= ? GROUP BY user_id")
+    .bind(day, Math.min(day, week)).all()).results || [];
+  for (const r of rows) {
+    if (!ids.includes(r.user_id)) continue;
+    if (r.lost >= 3) out.set(r.user_id, "week");
+    else if (r.today >= 1) out.set(r.user_id, "day");
+  }
+  return out;
+}
+
 const tradeOf = (ev) => ({ entry: ev.entry, sl: ev.sl, rr: ev.rr, vpe: ev.vpe, npe: ev.npe, cls: ev.cls, vmin: ev.vmin, vstep: ev.vstep, vmax: ev.vmax });
 
 async function onSignal(env, ev) {
@@ -818,8 +855,9 @@ async function onSignal(env, ev) {
   const users = await allUsers(env);
   const open = await openCounts(env);
   const t = now(), stmts = [], outbox = [];
+  const sensei = await senseiBlocked(env, users, t);
   for (const u of users) {
-    if (u.paused || u.stopped_until > t || !wantsMarket(u, ev.sym)) continue;
+    if (u.paused || u.stopped_until > t || !wantsMarket(u, ev.sym) || sensei.has(u.id)) continue;
     if ((open.get(u.id) || 0) >= MAX_OPEN) {
       stmts.push(env.DB.prepare("INSERT INTO deliveries (user_id, alert_id, sid, kind, sym, note, created) VALUES (?, ?, ?, 'signal', ?, 'max_open', ?)").bind(u.id, alertId, ev.sid, ev.sym, t));
       outbox.push([u.tg_chat, "ℹ️ Signal " + esc(ev.sym) + " pas envoyé : tu as déjà <b>" + MAX_OPEN + " trades en cours</b>."]);
@@ -843,8 +881,9 @@ async function onPre(env, ev) {
   const open = await openCounts(env);
   const t = now(), stmts = [], outbox = [];
   const canSize = Number.isFinite(ev.px) && Number.isFinite(ev.sld) && ev.sld > 0;
+  const sensei = await senseiBlocked(env, users, t);
   for (const u of users) {
-    if (u.paused || u.stopped_until > t || !wantsMarket(u, ev.sym) || (open.get(u.id) || 0) >= MAX_OPEN) continue;
+    if (u.paused || u.stopped_until > t || !wantsMarket(u, ev.sym) || (open.get(u.id) || 0) >= MAX_OPEN || sensei.has(u.id)) continue;
     const s = canSize ? sizeTrade(u, { ...tradeOf(ev), entry: ev.px, sl: ev.px - ev.sld }) : null;
     stmts.push(env.DB.prepare("INSERT INTO deliveries (user_id, alert_id, kind, sym, lot, risk, gain, created) VALUES (?, ?, 'pre', ?, ?, ?, ?, ?)")
       .bind(u.id, alertId, ev.sym, s && s.ok ? s.lot : 0, s && s.ok ? round2(s.risk) : 0, s && s.ok ? round2(s.gain) : 0, t));
@@ -862,7 +901,7 @@ async function onCancel(env, ev) {
     .bind(ev.sym, t - 900).all()).results || [];
   const stmts = rows.map((u) => env.DB.prepare("INSERT INTO deliveries (user_id, alert_id, kind, sym, created) VALUES (?, ?, 'cancel', ?, ?)").bind(u.id, alertId, ev.sym, t));
   if (stmts.length) await env.DB.batch(stmts);
-  const text = "⚪ <b>ANNULÉ · " + esc(ev.sym) + "</b>\n👉 <b>Ne fais rien.</b>";
+  const text = "⚪ <b>ANNULÉ · " + esc(ev.sym) + "</b>\n" + (ev.why ? esc(ev.why) + "\n" : "") + "👉 <b>Ne fais rien.</b>";
   return { result: { users: rows.length }, outbox: rows.map((u) => [u.tg_chat, text]) };
 }
 
@@ -871,7 +910,7 @@ async function onResult(env, ev) {
   if (!alertId) return { dup: true };
   const cur = ev.cur || "EUR";
   const r = Number.isFinite(ev.r) ? ev.r : 0;
-  const ds = (await env.DB.prepare("SELECT d.*, u.tg_chat, u.capital, u.risk_pct, u.stopped_until, a.data AS adata FROM deliveries d JOIN users u ON u.id = d.user_id JOIN alerts a ON a.id = d.alert_id WHERE d.sid = ? AND d.kind = 'signal' AND d.result IS NULL")
+  const ds = (await env.DB.prepare("SELECT d.*, u.tg_chat, u.capital, u.risk_pct, u.stopped_until, u.sensei, a.data AS adata FROM deliveries d JOIN users u ON u.id = d.user_id JOIN alerts a ON a.id = d.alert_id WHERE d.sid = ? AND d.kind = 'signal' AND d.result IS NULL")
     .bind(ev.sid).all()).results || [];
   if (!ds.length) return { result: { users: 0 }, outbox: [] };
   const t = now();
@@ -891,6 +930,7 @@ async function onResult(env, ev) {
   }
   await env.DB.batch(ds.map((d) => env.DB.prepare("UPDATE deliveries SET result = ?, r = ?, money = ?, closed = ? WHERE id = ?").bind(ev.res || "exp", d.risk > 0 ? Math.round(d.money / d.risk * 100) / 100 : r, d.money, t, d.id)));
   const stats = await statsByUser(env, [...new Set(ds.map((d) => d.user_id))]);
+  const zen = await senseiBlocked(env, ds.filter((d) => d.sensei).map((d) => ({ id: d.user_id, sensei: 1 })), t);
   const outbox = [], stops = [];
   for (const d of ds) {
     const st = stats.get(d.user_id);
@@ -899,6 +939,10 @@ async function onResult(env, ev) {
     if (d.lot > 0 && d.money < 0 && d.stopped_until <= t && st.today <= -dailyStopMoney({ capital: d.capital, risk_pct: d.risk_pct }) + 0.005 && !stops.includes(d.user_id)) {
       stops.push(d.user_id);
       text += "\n\n🛑 <b>STOP POUR AUJOURD'HUI</b>\nTu as perdu <b>" + money(-st.today, cur, false) + "</b> aujourd'hui. Plus de signaux jusqu'à demain.";
+    } else if (d.lot > 0 && zen.get(d.user_id) === "week") {
+      text += "\n\n🧘 <b>Mode El Sensei</b> : 3 pertes cette semaine.\nPause jusqu'à <b>lundi</b>.";
+    } else if (d.lot > 0 && zen.get(d.user_id) === "day") {
+      text += "\n\n🧘 <b>Mode El Sensei</b> : 1 trade par jour.\nC'est fini pour aujourd'hui, à demain !";
     }
     outbox.push([d.tg_chat, text]);
   }
@@ -988,6 +1032,8 @@ function marketOpen(ts) {
 const CLOUD = {
   enabled: true,                      // le robot cloud envoie les signaux (le robot MT5 n'est plus nécessaire)
   hourStart: 6, hourEnd: 19,          // nouveaux signaux entre 6 h et 19 h (Paris)
+  closeHour: 21,                      // règle d'El Sensei : on ferme tout le soir (21 h), rien pendant la nuit
+  newsBefore: 30 * 60, newsAfter: 15 * 60, // pas de signal 30 min avant / 15 min après une annonce forte (Forex Factory)
   rsiHigh: 70, rsiLow: 30, atrMult: 1.5, r1: 1, r2: 5,
   // deux réglages testés sur les vrais prix (H1 : 6 mois, M15 : 2 mois), ~4 signaux par jour à eux deux
   tfs: [
@@ -1033,6 +1079,27 @@ async function goldOffset() {
     return Number.isFinite(j.price) ? j.price : null;
   } catch (e) { return null; }
 }
+
+// ---- annonces économiques fortes (calendrier Forex Factory de la semaine, impact « High »)
+async function fetchNews() {
+  const r = await fetch("https://nfs.faireconomy.media/ff_calendar_thisweek.json", { headers: { "User-Agent": "Mozilla/5.0 (AlertesPro)" }, cf: { cacheTtl: 600 } });
+  if (!r.ok) throw new Error("annonces : " + r.status);
+  const j = await r.json();
+  if (!Array.isArray(j)) throw new Error("annonces : format");
+  return j.filter((e) => e && e.impact === "High").map((e) => [Math.floor(Date.parse(e.date) / 1000), String(e.country || "").toUpperCase(), String(e.title || "").slice(0, 60)])
+    .filter((e) => Number.isFinite(e[0]) && e[1]);
+}
+const symCurrencies = (sym) => [sym.slice(0, 3), sym.slice(3, 6)];
+function newsNear(S, sym, t) {
+  const list = (S.news && S.news.ev) || [], cs = symCurrencies(sym);
+  return list.find((e) => cs.includes(e[1]) && e[0] >= t - CLOUD.newsAfter && e[0] <= t + CLOUD.newsBefore) || null;
+}
+function nextNews(S, sym, t) {
+  const list = (S.news && S.news.ev) || [], cs = symCurrencies(sym), end = parisDayStart(t) + 86400;
+  const e = list.filter((x) => cs.includes(x[1]) && x[0] >= t - CLOUD.newsAfter && x[0] < end).sort((a, b) => a[0] - b[0])[0];
+  return e ? hhmm(e[0]) + " " + e[1] + " · " + e[2] : "";
+}
+const closeTimeOf = (opened) => parisDayStart(opened) + CLOUD.closeHour * 3600;
 
 // ---- indicateurs (tableaux du plus ancien au plus récent)
 function emaArr(v, n) {
@@ -1192,6 +1259,7 @@ async function cloudRun(env, t) {
       await run({ type: "tp1", eid: "t:" + tr.sid, sid: tr.sid, sym: tr.sym, side: tr.buy ? "buy" : "sell", entry: tr.entry, tp1: tr.tp1, r1: CLOUD.r1, dg: m.dg, cur: "EUR" });
     }
     if (tr.buy ? hi >= tr.tp : lo <= tr.tp) { await close("tp", tr.tp); continue; }
+    if (t >= (tr.until || closeTimeOf(tr.opened))) { await close("eod", b.price); continue; }
     if (t - tr.opened >= (tr.life || 48 * 3600)) await close("exp", b.price);
   }
 
@@ -1213,7 +1281,7 @@ async function cloudRun(env, t) {
       if (x.kind === "pre") {
         S.pre[x.key] = x.barStart;
         const i = idxOf(x.barStart);
-        if (i < 0 || open) continue;
+        if (i < 0 || open || newsNear(S, sym, x.barStart + x.cfg.tf)) continue;
         const sig = evalCloud(b, A, i, htfUp, x.cfg.adxMin);
         if (sig) await run({ type: "pre", eid: "p:" + x.key + ":" + x.barStart, sym, side: sig.buy ? "buy" : "sell", tf: x.cfg.name, at: x.barStart + x.cfg.tf, px: b.price, sld: sig.atr * CLOUD.atrMult, rr: cloudTarget(), ...sz });
         else delete S.pre[x.key + ":sent"];
@@ -1223,7 +1291,9 @@ async function cloudRun(env, t) {
       // signal sur la bougie qui vient de se fermer
       S.last[x.key] = x.barStart;
       const i = idxOf(x.barStart);
-      const sig = i >= 0 && !open && inCloudHours(x.barStart + x.cfg.tf) ? evalCloud(b, A, i, htfUp, x.cfg.adxMin) : null;
+      const news = newsNear(S, sym, t);
+      let sig = i >= 0 && !open && inCloudHours(x.barStart + x.cfg.tf) ? evalCloud(b, A, i, htfUp, x.cfg.adxMin) : null;
+      if (sig && news) { console.log("annonce " + news[1] + " " + news[2] + " : signal " + sym + " " + x.cfg.name + " pas envoyé"); sig = null; }
       if (sig) {
         const buy = sig.buy, entry = b.price, dist = sig.atr * CLOUD.atrMult, k = buy ? 1 : -1;
         const sid = sym + "-" + x.cfg.name + "-" + (x.barStart + x.cfg.tf);
@@ -1232,15 +1302,19 @@ async function cloudRun(env, t) {
           r1: CLOUD.r1, r2: CLOUD.r2, rr: cloudTarget(), lim: +(entry + k * dist * 0.2).toFixed(m.dg), vu: t + x.cfg.validMin * 60,
           slp: dist / m.pip, tpp: dist * CLOUD.r2 / m.pip, rs: sig.why, ...sz };
         await run(ev);
-        S.tracks.push({ sid, sym, tf: x.cfg.name, buy, entry: ev.entry, sl: ev.sl, tp1: ev.tp1, tp: ev.tp, tp1Hit: false, opened: t, life: x.cfg.expire });
+        S.tracks.push({ sid, sym, tf: x.cfg.name, buy, entry: ev.entry, sl: ev.sl, tp1: ev.tp1, tp: ev.tp, tp1Hit: false, opened: t, life: x.cfg.expire, until: closeTimeOf(t) });
       } else if (S.pre[x.key + ":sent"] === x.barStart) {
-        await run({ type: "cancel", eid: "c:" + x.key + ":" + x.barStart, sym });
+        await run({ type: "cancel", eid: "c:" + x.key + ":" + x.barStart, sym, why: news ? "📰 Annonce importante à " + hhmm(news[0]) + " (" + news[1] + ")" : "" });
       }
     }
   }
 
   // ---- minute calme : mise à jour de la tendance H4 d'un marché (tour à tour)
-  if (!jobs.size || [...jobs.values()].every((j) => !j.tfs.length)) {
+  const quiet = !jobs.size || [...jobs.values()].every((j) => !j.tfs.length);
+  if (quiet && (!S.news || t - S.news.t > (S.news.ok ? 4 * 3600 : 1800))) {
+    try { S.news = { t, ok: true, ev: await fetchNews() }; }
+    catch (e) { console.log(String(e)); S.news = Object.assign({ ev: [] }, S.news || {}, { t, ok: false }); }
+  } else if (quiet) {
     const list = CLOUD.markets.filter((m) => !S.htf[m.sym] || t - S.htf[m.sym].t > 3600);
     const m = list[0] || CLOUD.markets[S.hp++ % CLOUD.markets.length];
     try {
@@ -1259,7 +1333,7 @@ async function cloudRun(env, t) {
   if (t - S.status >= 300) {
     const markets = CLOUD.markets.filter((m) => S.cache[m.sym] && S.cache[m.sym].sld).map((m) => {
       const c = S.cache[m.sym];
-      return { sym: m.sym, dir: c.dir || "flat", rsi: c.rsi, px: c.px, sld: c.sld, slp: c.sld / m.pip, news: "", ...cloudSizing(m, c.px, S) };
+      return { sym: m.sym, dir: c.dir || "flat", rsi: c.rsi, px: c.px, sld: c.sld, slp: c.sld / m.pip, news: nextNews(S, m.sym, t), ...cloudSizing(m, c.px, S) };
     });
     if (markets.length) {
       S.status = t;
@@ -1375,6 +1449,10 @@ async function handle(req, env, ctx) {
         if (!(a.vu > t)) continue;
         lines.push(["S", r.id, a.sym, a.side, a.entry, a.sl, a.tp1 || 0, a.tp, a.r1 || 0, a.r2 || 0, r.lot, a.vu, a.lim || 0, a.tf || ""].join("|"));
       }
+      // trades à fermer tout de suite (fin de journée à 21 h, ou trop vieux)
+      const shut = (await env.DB.prepare("SELECT id FROM deliveries WHERE user_id = ? AND kind = 'signal' AND lot > 0 AND result IN ('eod', 'exp') AND closed > ? ORDER BY id")
+        .bind(u.id, t - 6 * 3600).all()).results || [];
+      for (const r of shut) lines.push("C|" + r.id);
       return new Response(lines.join("\n"), { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", ...CORS } });
     }
     if (path === "/api/markets" && method === "GET") return apiMarkets(env, u);

@@ -389,7 +389,7 @@ function demoData() {
   const t = nowS();
   const mk = (sym, dir, p, dg, lot, risk, minCapital) => ({ sym, dir, px: p, dg, ok: !!lot, lot, risk, gain: risk * 3, minCapital, followed: true, news: "" });
   S.me = {
-    user: { name: "Karim", email: "karim@exemple.fr", capital: 1000, riskPct: 1, riskMoney: 10, dailyStop: 30, admin: false, paused: false, markets: "*",
+    user: { name: "Karim", email: "karim@exemple.fr", capital: 1000, riskPct: 1, riskMoney: 10, dailyStop: 30, admin: false, paused: false, sensei: false, markets: "*",
       telegram: { linked: true, name: "Karim" }, linkCode: "AB3K9QXZ", linkUrl: "", stoppedUntil: 0 },
     stats: { wins: 7, losses: 4, money: 61.4, today: 16.3, open: 1 },
     robot: { online: true, lastSeen: t - 120, tf: "H1 + M15", rr: 3, cur: "EUR", active: true, marketOpen: true, hours: [6, 19], open: 1,
@@ -600,8 +600,9 @@ function robotCard() {
   const h = r.hours || [6, 19];
   let tone, title, txt;
   if (!r.marketOpen && !S.demo) { tone = "tone-blue"; title = "🏖️ Marchés fermés"; txt = "Le week-end, les marchés sont fermés. Le robot reprend lundi à " + h[0] + " h."; }
-  else if (!r.active && !S.demo) { tone = "tone-blue"; title = "😴 Le robot fait une pause"; txt = "Nouveaux signaux de " + h[0] + " h à " + h[1] + " h, du lundi au vendredi. Les trades en cours restent suivis."; }
-  else { tone = "tone-green"; title = "🟢 Le robot analyse " + n + " marchés"; txt = "Bougies 1 h et 15 min · pré-alerte 1 minute avant · environ 4 signaux par jour."; }
+  else if (!r.active && !S.demo) { tone = "tone-blue"; title = "😴 Le robot fait une pause"; txt = "Nouveaux signaux de " + h[0] + " h à " + h[1] + " h, du lundi au vendredi. Les trades en cours sont suivis, puis fermés à 21 h."; }
+  else { tone = "tone-green"; title = "🟢 Le robot analyse " + n + " marchés"; txt = "Bougies 1 h et 15 min · pré-alerte 1 minute avant · environ 4 signaux par jour.<br>📰 Rien autour des annonces fortes · 🌙 tout est fermé à 21 h."; }
+  if (S.me.user && S.me.user.sensei) txt += "<br>🧘 <b>Mode El Sensei</b> : tu reçois 1 seul trade par jour.";
   return '<div class="card ' + tone + '"><h3>' + title + '</h3><p class="muted small">' + txt + "</p>" +
     '<p class="dim small" style="margin-top:6px">' + (r.lastSeen ? "Dernière analyse " + ago(r.lastSeen) : "Première analyse en cours…") + (r.open ? " · " + r.open + " trade" + (r.open > 1 ? "s" : "") + " en cours" : "") + "</p></div>";
 }
@@ -658,14 +659,14 @@ function alertRow(a) {
   const d = a.data || {};
   if (a.kind === "pre") return '<div class="alert"><div class="ic gold">🟡</div><div class="body"><div class="t1">Prépare-toi · ' + esc(a.sym) + '<span class="when">' + when(a.created) + "</span></div>" +
     '<div class="t2">' + (d.side === "buy" ? "Achat" : "Vente") + " possible à " + hhmm(d.at || a.created) + "</div></div></div>";
-  if (a.kind === "cancel") return '<div class="alert"><div class="ic grey">⚪</div><div class="body"><div class="t1">Annulé · ' + esc(a.sym) + '<span class="when">' + when(a.created) + '</span></div><div class="t2">Les conditions ne sont plus réunies. Rien à faire.</div></div></div>';
+  if (a.kind === "cancel") return '<div class="alert"><div class="ic grey">⚪</div><div class="body"><div class="t1">Annulé · ' + esc(a.sym) + '<span class="when">' + when(a.created) + '</span></div><div class="t2">' + (d.why ? esc(d.why) + ". " : "Les conditions ne sont plus réunies. ") + 'Rien à faire.</div></div></div>';
   const buy = d.side === "buy";
   let pill;
   if (a.result === "tp" || a.result === "tp1") pill = '<span class="pill green">✅ ' + eur(a.money, true) + "</span>";
   else if (a.result === "be") pill = '<span class="pill green">🟡 ' + eur(a.money, true) + "</span>";
   else if (!a.result && String(a.note || "").includes(";tp1")) pill = '<span class="pill green">🎯 TP1 touché</span>';
   else if (a.result === "sl") pill = '<span class="pill red">❌ ' + eur(a.money, true) + "</span>";
-  else if (a.result) pill = '<span class="pill ' + (a.money >= 0 ? "green" : "red") + '">⌛ ' + eur(a.money, true) + "</span>";
+  else if (a.result) pill = '<span class="pill ' + (a.money >= 0 ? "green" : "red") + '">' + (a.result === "eod" ? "🌙 " : "⌛ ") + eur(a.money, true) + "</span>";
   else if (!(a.lot > 0)) pill = '<span class="pill grey">⛔ pas pris</span>';
   else if (d.vu > nowS()) pill = '<span class="pill blue">⏱ jusqu\'à ' + hhmm(d.vu) + "</span>";
   else pill = '<span class="pill gold">⏳ en cours</span>';
@@ -733,6 +734,7 @@ function tabAccount() {
       '<div class="row" style="margin-top:12px"><button class="btn small ghost" data-act="test">📨 Message test</button><button class="btn small line" data-act="relink">Changer de Telegram</button></div></div>'
     : telegramCard(true);
   html += '<div class="card"><h3>🔔 Alertes</h3><div class="setting"><div class="txt"><b>Recevoir les signaux</b><small>' + (u.paused ? "En pause : tu reçois seulement les résultats." : "Actif") + '</small></div><label class="sw"><input type="checkbox" data-act="pause"' + (u.paused ? "" : " checked") + "><i></i></label></div>" +
+    '<div class="setting" style="margin-top:12px"><div class="txt"><b>🧘 Mode El Sensei</b><small>' + (u.sensei ? "1 seul trade par jour, pause jusqu'à lundi après 3 pertes dans la semaine." : "Désactivé : tu reçois tous les signaux (environ 4 par jour).") + '</small></div><label class="sw"><input type="checkbox" data-act="sensei"' + (u.sensei ? " checked" : "") + "><i></i></label></div>" +
     '<p class="dim small" style="margin-top:8px">🛡️ Protections : 3 trades en cours max, et stop automatique pour la journée après ' + eur(u.dailyStop) + ' de pertes.</p></div>';
   html += autoCard();
   if (u.admin) html += adminCard();
@@ -742,7 +744,10 @@ function tabAccount() {
     "<details><summary>Comment passer l'ordre sur MT5 (téléphone) ?</summary><p>1. Ouvre MT5 › onglet <b>Cotations</b> › touche le marché (ex. EURUSD) › <b>Nouvel ordre</b>.<br>2. Mets le <b>volume</b> du signal.<br>3. Remplis <b>Stop Loss</b> et <b>Take Profit</b> avec les prix du signal.<br>4. Touche <b>BUY</b> pour un achat, <b>SELL</b> pour une vente.</p></details>" +
     "<details><summary>Pourquoi « passe ton tour » ?</summary><p>Sur certains marchés (comme l'or), même le plus petit volume (0,01 lot) te ferait risquer trop d'argent pour ton capital. Pour ne pas cramer ton compte, l'appli te dit de ne pas le prendre.</p></details>" +
     "<details><summary>Le bilan, c'est mon vrai argent ?</summary><p>Non : c'est ce que tu aurais gagné ou perdu <b>si tu as suivi tous les signaux</b> avec le volume conseillé. Ton vrai résultat est dans MT5.</p></details>" +
-    "<details><summary>Ça gagne à tous les coups ?</summary><p>Non. Il y aura des pertes. Le robot vise des gains 2 fois plus grands que les pertes, pour rester gagnant même en perdant plus d'une fois sur deux. Commence sur un <b>compte démo</b>.</p></details></div>";
+    "<details><summary>Ça gagne à tous les coups ?</summary><p>Non. Il y aura des pertes, parfois 5 ou 6 d'affilée : c'est normal. Le robot vise des gains plus grands que les pertes (TP1 = autant que la perte, TP2 = 5 fois la perte), pour rester gagnant même en perdant souvent. Commence sur un <b>compte démo</b>.</p></details>" +
+    "<details><summary>Pourquoi le trade est fermé à 21 h ?</summary><p>Règle d'El Sensei : on ne garde <b>rien pendant la nuit</b> (frais, écarts de prix, surprises). À 21 h, l'appli t'envoie « 🌙 Fin de journée » : ferme le trade dans MT5. Testé sur 6 mois de prix : moins de grosses baisses et plus de gains.</p></details>" +
+    "<details><summary>Pourquoi pas de signal pendant les annonces ?</summary><p>Les grosses annonces économiques (en rouge sur Forex Factory, souvent à 14 h 30) font sauter les prix et les Stop Loss. Le robot ne donne <b>aucun signal 30 min avant et 15 min après</b>. Les annonces du jour s'affichent dans l'onglet Marchés.</p></details>" +
+    "<details><summary>C'est quoi le mode El Sensei ?</summary><p>Sa règle d'argent : <b>1 seul trade par jour</b> (gagné ou perdu, on arrête), et <b>pause jusqu'à lundi après 3 pertes</b> dans la semaine. Tu reçois moins de signaux, mais tu évites les séries de pertes. Active-le dans Compte › Alertes, ou envoie /sensei au bot.</p></details></div>";
   html += '<button class="btn line" data-act="logout">Se déconnecter</button><button class="btn danger" data-act="delete">Supprimer mon compte</button>' +
     '<p class="legal">AlertesPro · signaux automatiques, sans garantie de gain.<br>Pas un conseil en investissement. Le trading comporte un risque de perte en capital.</p></div>';
   return html;
@@ -842,6 +847,7 @@ async function act(name, el) {
     if (name === "refresh") { await refresh(); return toast("🔄 À jour"); }
     if (name === "check-tg") { await refresh(false); return toast(S.me.user.telegram.linked ? "✅ Telegram relié !" : "Pas encore relié : touche DÉMARRER dans Telegram"); }
     if (name === "resume") { setMe(await api("/api/me", "PUT", { paused: false })); toast("▶️ Signaux relancés"); return render(); }
+    if (name === "sensei") { setMe(await api("/api/me", "PUT", { sensei: el.checked })); toast(el.checked ? "🧘 Mode El Sensei : 1 trade par jour" : "🔔 Tous les signaux"); return render(); }
     if (name === "pause") { setMe(await api("/api/me", "PUT", { paused: !el.checked })); toast(el.checked ? "🔔 Signaux activés" : "⏸️ Signaux en pause"); return render(); }
     if (name === "save") {
       S.busy = true; S.error = ""; S.msg = "";
