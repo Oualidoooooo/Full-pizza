@@ -1338,6 +1338,19 @@ async function handle(req, env, ctx) {
       return r.ok ? json({ ok: true }) : fail(502, "Telegram n'a pas pu envoyer le message (as-tu bloqué le bot ?).");
     }
     if (path === "/api/alerts" && method === "GET") return apiAlerts(env, u, url);
+    if (path === "/api/ea" && method === "GET") {
+      // signaux en cours pour le robot qui passe les ordres (format texte simple pour MT5)
+      const rows = (await env.DB.prepare("SELECT d.id, d.lot, a.data FROM deliveries d JOIN alerts a ON a.id = d.alert_id WHERE d.user_id = ? AND d.kind = 'signal' AND d.result IS NULL AND d.lot > 0 AND d.created > ? ORDER BY d.id")
+        .bind(u.id, now() - 3600).all()).results || [];
+      const t = now(), lines = ["OK|" + t];
+      for (const r of rows) {
+        let a = {};
+        try { a = JSON.parse(r.data); } catch (e) { continue; }
+        if (!(a.vu > t)) continue;
+        lines.push(["S", r.id, a.sym, a.side, a.entry, a.sl, a.tp1 || 0, a.tp, a.r1 || 0, a.r2 || 0, r.lot, a.vu, a.lim || 0, a.tf || ""].join("|"));
+      }
+      return new Response(lines.join("\n"), { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", ...CORS } });
+    }
     if (path === "/api/markets" && method === "GET") return apiMarkets(env, u);
     if (path === "/api/logout" && method === "POST") {
       const m = (req.headers.get("Authorization") || "").match(/^Bearer\s+(\S+)$/);
