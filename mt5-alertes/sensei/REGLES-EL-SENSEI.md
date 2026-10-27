@@ -1,6 +1,6 @@
 # Les règles d'El Sensei (playlist « Como empezar a hacer Trading paso a paso »)
 
-Notes prises en lisant les transcriptions complètes des vidéos (en espagnol).
+Notes prises en lisant les transcriptions complètes des **32 vidéos** de la playlist (en espagnol ; les vidéos #20 et #22 ne sont plus disponibles).
 Elles servent à tester ses règles sur l'historique et à les ajouter au robot seulement si ça améliore les résultats.
 
 ## Stratégie 1 – Structure + rupture de support/résistance, New York (vidéo #21)
@@ -95,6 +95,31 @@ Elles servent à tester ses règles sur l'historique et à les ajouter au robot 
 - Il analyse sur ordinateur (TradingView), passe les ordres sur MT5 (téléphone).
 - **1 % maximum par trade et 1 % par jour.** 5 % par mois, c'est déjà très bien ; viser plus mène à tout perdre.
 
+## Stratégie de la séance de New York (vidéo #30) — sa stratégie « la plus à jour »
+- **Bougies 5 min**, **7 h – 11 h New York** (13 h – 17 h à Paris) : entrées seulement dans ce créneau (le trade peut finir après).
+- Chaque séance fait un plus haut et un plus bas. Dès 7 h, attendre le **1er order block** de la séance
+  (dernière bougie contraire avant un mouvement plus fort que le précédent) : c'est peut-être le haut (ou le bas) de la séance.
+- **Fibonacci** du dernier sommet au dernier creux du mouvement → **ordre limite à 50 %**.
+- **Stop Loss 2 pips derrière l'order block**, **Take Profit 1 : 2**. Option : Stop Loss au prix d'entrée quand on est à +1R.
+- Ses règles : **1 seul trade par jour**, **1 %**, pas les jours fériés (USD/EUR), rien hors horaire.
+  Avec son propre argent il dit qu'on **peut** trader les annonces (pas avec un compte financé).
+- Il annonce **53 % de trades gagnants sur 6 mois** (EURUSD).
+
+## Liquidité (vidéo #34)
+- La liquidité = l'argent des **Stop Loss** accumulés au-dessus des résistances et sous les supports.
+- **Plus un niveau est touché, plus il est faible** (pas plus fort) : le prix va souvent le dépasser un peu
+  (« prise de liquidité », il sort les Stop Loss) puis repartir dans l'autre sens.
+- Ne pas mettre son Stop Loss juste derrière un niveau évident.
+
+## Les 5 règles (vidéo #32) et les erreurs (vidéos #28, #29, #31)
+1. Le trading, ce sont des **probabilités** : même une bonne stratégie gagne 50–60 % du temps. Viser **au moins 2 fois** ce qu'on risque (idéal 3).
+   Avant chaque trade, se dire que l'argent risqué est déjà perdu. Jamais de « mode récupération ».
+2. **Ne pas mettre beaucoup d'argent au début** : 1) être rentable en démo, 2) puis sur un petit compte, 3) puis grandir.
+3. **Ne pas mélanger les stratégies** de plusieurs personnes (pas d'indicateur ajouté à sa méthode, etc.).
+4. Se concentrer sur une seule chose tant qu'on ne la maîtrise pas.
+5. **Apprendre à perdre** : il a eu des mois négatifs (−140 000 $ en début 2024 avec sa stratégie) et des séries de 5–6 pertes.
+- Les comptes financés sont surtout perdus par manque de **discipline** (ne pas suivre son plan), pas par manque de stratégie.
+
 ---
 
 # Ce qui a été testé sur les vrais prix et ajouté au robot
@@ -110,3 +135,10 @@ Tests faits sur 6 mois de bougies H1 et 2 mois de bougies M15, 11 marchés (R = 
 | Rejeter les bougies géantes (annonces) | Un peu moins bien | ❌ Pas ajouté |
 | Scalping 3 touches, SL/TP 7 pips | 60 jours en 2 min sur 4 paires : **aucun avantage** (USDJPY −18 R, les autres ≈ 0 avec l'écart du courtier) | ❌ Pas ajouté |
 | Order blocks H1 (zone retouchée, sens de la tendance H4, SL derrière la zone) | 6 mois, 11 marchés, 8 réglages : **tous perdants** (−13 à −142 R). Sans l'œil humain pour choisir « le bon » order block, la règle seule ne marche pas | ❌ Pas ajouté |
+| **Stratégie New York #30** (5 min, 1er order block, ordre limite à 50 %, SL 2 pips derrière, TP 1 : 2, 1 trade/jour) | 60 jours, 11 marchés, 8 réglages : **tous perdants** (−30 à −85 R), 30 % de gagnants au lieu des 53 % annoncés. EURUSD seul ≈ 0 | ❌ Pas ajouté |
+| **Prise de liquidité** (niveau touché 2–3 fois, mèche au-delà puis retour → trade dans l'autre sens) | H1, M15 et 5 min : **tous perdants** (−18 à −61 R) | ❌ Pas ajouté |
+
+**Conclusion :** ce qui marche chez El Sensei, mis dans un robot, ce sont ses **règles de gestion** (fermer le soir, éviter les annonces,
+1 trade par jour, 1 %, accepter les pertes). Ses façons d'**entrer** (order blocks, liquidité, Fibonacci) dépendent de son œil :
+écrites comme des règles fixes, elles perdent sur les vrais prix. Le robot garde donc sa propre stratégie d'entrée (testée gagnante)
+et applique les règles de gestion d'El Sensei.
