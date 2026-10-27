@@ -69,6 +69,7 @@ a{color:var(--accent)}
 .sec button{font-size:13px;color:var(--accent);font-weight:600}
 .hello{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:2px 2px 14px}
 .hello small{display:block;font-size:14px;font-weight:500;color:var(--muted);margin-top:2px;letter-spacing:0}
+.tone-green{background:linear-gradient(160deg,rgba(31,209,151,.16),var(--card) 70%);border-color:rgba(31,209,151,.35)}
 .tone-red{background:linear-gradient(160deg,rgba(255,90,110,.16),var(--card) 70%);border-color:rgba(255,90,110,.35)}
 .tone-gold{background:linear-gradient(160deg,rgba(245,185,74,.16),var(--card) 70%);border-color:rgba(245,185,74,.35)}
 .tone-blue{background:linear-gradient(160deg,rgba(79,179,255,.16),var(--card) 70%);border-color:rgba(79,179,255,.35)}
@@ -386,30 +387,33 @@ function setTab(tab) { S.tab = tab; S.form = {}; S.error = ""; render(); window.
 // ------------------------------------------------------------------ exemple
 function demoData() {
   const t = nowS();
-  const mk = (sym, dir, p, dg, lot, risk, minCapital) => ({ sym, dir, px: p, dg, ok: !!lot, lot, risk, gain: risk * 2, minCapital, followed: true, news: "" });
+  const mk = (sym, dir, p, dg, lot, risk, minCapital) => ({ sym, dir, px: p, dg, ok: !!lot, lot, risk, gain: risk * 3, minCapital, followed: true, news: "" });
   S.me = {
     user: { name: "Karim", email: "karim@exemple.fr", capital: 1000, riskPct: 1, riskMoney: 10, dailyStop: 30, admin: false, paused: false, markets: "*",
       telegram: { linked: true, name: "Karim" }, linkCode: "AB3K9QXZ", linkUrl: "", stoppedUntil: 0 },
     stats: { wins: 7, losses: 4, money: 61.4, today: 16.3, open: 1 },
-    robot: { online: true, lastSeen: t - 120, tf: "H1", rr: 2, cur: "EUR" }, bot: "alertes_trading_4827_bot",
+    robot: { online: true, lastSeen: t - 120, tf: "H1 + M15", rr: 3, cur: "EUR", active: true, marketOpen: true, hours: [6, 19], open: 1,
+      symbols: ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "AUDUSD", "USDCHF", "USDCAD", "NZDUSD", "EURJPY", "GBPJPY", "EURGBP"] },
+    bot: "alertes_trading_4827_bot", perf: { days: 30, n: 64, wins: 35, losses: 27, R: 9.4 }, auto: null,
   };
-  S.markets = { online: true, updated: t - 120, tf: "H1", rr: 2, markets: [
+  S.markets = { online: true, updated: t - 120, tf: "H1 + M15", rr: 3, markets: [
     mk("EURUSD", "up", 1.08452, 5, "0.05", 8.33), mk("GBPUSD", "down", 1.295, 5, "0.04", 8.15),
-    mk("USDJPY", "flat", 152.304, 3, "0.06", 9.12), mk("XAUUSD", "up", 2650.5, 2, null, null, 2084)] };
+    mk("USDJPY", "flat", 152.304, 3, "0.06", 9.12), mk("XAUUSD", "up", 2650.5, 2, null, null, 2084),
+    mk("AUDUSD", "down", 0.6512, 5, "0.07", 9.31), mk("EURJPY", "up", 165.21, 3, "0.05", 8.9)] };
   const sig = (id, sym, side, entry, sl, tp, dg, lot, risk, created, extra = {}) => {
     const pip = dg === 3 ? 0.01 : dg === 2 ? 0.1 : 0.0001;
-    return { id, kind: "signal", sym, lot, risk, gain: risk * 2, note: null, result: null, r: null, money: null, created,
-      data: { sym, side, tf: "H1", entry, sl, tp: side === "buy" ? entry + (entry - sl) * 3 : entry - (sl - entry) * 3, tp1: side === "buy" ? entry + (entry - sl) : entry - (sl - entry), r1: 1, r2: 3, vmin: 0.01, vstep: 0.01, dg, rr: 2, tpp: Math.abs(entry - sl) * 3 / pip, lim: side === "buy" ? entry + (entry - sl) * 0.2 : entry - (sl - entry) * 0.2, vu: created + 900,
+    return { id, kind: "signal", sym, lot, risk, gain: risk * 3, note: null, result: null, r: null, money: null, created,
+      data: { sym, side, tf: "H1", entry, sl, tp: side === "buy" ? entry + (entry - sl) * 5 : entry - (sl - entry) * 5, tp1: side === "buy" ? entry + (entry - sl) : entry - (sl - entry), r1: 1, r2: 5, vmin: 0.01, vstep: 0.01, dg, rr: 3, tpp: Math.abs(entry - sl) * 5 / pip, lim: side === "buy" ? entry + (entry - sl) * 0.2 : entry - (sl - entry) * 0.2, vu: created + 900,
         slp: Math.abs(entry - sl) / pip, rs: "Tendance haussière (prix au-dessus de l'EMA 200) · confirmée en H4 · tendance forte (ADX 27)" }, ...extra };
   };
   S.alerts = [
     sig(9, "EURUSD", "buy", 1.08452, 1.08272, 1.08812, 5, 0.05, 8.33, t - 200),
     { id: 8, kind: "pre", sym: "EURUSD", lot: 0.05, risk: 8.33, created: t - 260, data: { sym: "EURUSD", side: "buy", at: t - 200 } },
-    sig(7, "GBPUSD", "sell", 1.295, 1.2972, 1.2906, 5, 0.04, 8.15, t - 3 * 3600, { result: "tp", r: 2, money: 16.3 }),
+    sig(7, "GBPUSD", "sell", 1.295, 1.2972, 1.2906, 5, 0.04, 8.15, t - 3 * 3600, { result: "tp", r: 3, money: 24.45 }),
     sig(6, "XAUUSD", "sell", 2650.5, 2673, 2605.5, 2, 0, 20.83, t - 7 * 3600, { note: "small:2084" }),
     sig(5, "USDJPY", "buy", 152.1, 151.85, 152.6, 3, 0.06, 9.12, t - 26 * 3600, { result: "sl", r: -1, money: -9.12 }),
     { id: 4, kind: "cancel", sym: "EURUSD", created: t - 30 * 3600, data: { sym: "EURUSD" } },
-    sig(3, "EURUSD", "buy", 1.0812, 1.0794, 1.0848, 5, 0.05, 8.33, t - 50 * 3600, { result: "tp", r: 2, money: 16.67 }),
+    sig(3, "EURUSD", "buy", 1.0812, 1.0794, 1.0848, 5, 0.05, 8.33, t - 50 * 3600, { result: "tp", r: 3, money: 25 }),
   ];
 }
 function startDemo() { S.demo = true; demoData(); go("main", "home"); }
@@ -500,8 +504,8 @@ function viewForgot() {
 function viewMain() {
   const r = S.me && S.me.robot;
   const chip = S.demo ? '<span class="chip demo"><span class="dot"></span>Exemple</span>'
-    : r && r.online ? '<span class="chip on"><span class="dot"></span>Robot en ligne</span>'
-    : '<span class="chip off"><span class="dot"></span>Robot hors ligne</span>';
+    : r && r.online ? '<button class="chip on" data-act="refresh"><span class="dot"></span>Robot en ligne</button>'
+    : '<button class="chip off" data-act="refresh"><span class="dot"></span>Robot hors ligne</button>';
   let body = '<div class="empty"><span class="spin"></span></div>';
   if (S.me) body = S.tab === "markets" ? tabMarkets() : S.tab === "alerts" ? tabAlerts() : S.tab === "account" ? tabAccount() : tabHome();
   const band = S.demo ? '<div class="demo-band">👀 Exemple avec de faux chiffres.<button data-act="exit-demo">' + (API ? "Créer mon compte ›" : "Quitter") + "</button></div>" : "";
@@ -590,16 +594,49 @@ function skipText(a) {
   return "ce trade n'était pas possible pour ton compte.";
 }
 
+function robotCard() {
+  const r = S.me.robot || {};
+  const n = (r.symbols && r.symbols.length) || 11;
+  const h = r.hours || [6, 19];
+  let tone, title, txt;
+  if (!r.marketOpen && !S.demo) { tone = "tone-blue"; title = "🏖️ Marchés fermés"; txt = "Le week-end, les marchés sont fermés. Le robot reprend lundi à " + h[0] + " h."; }
+  else if (!r.active && !S.demo) { tone = "tone-blue"; title = "😴 Le robot fait une pause"; txt = "Nouveaux signaux de " + h[0] + " h à " + h[1] + " h, du lundi au vendredi. Les trades en cours restent suivis."; }
+  else { tone = "tone-green"; title = "🟢 Le robot analyse " + n + " marchés"; txt = "Bougies 1 h et 15 min · pré-alerte 1 minute avant · environ 4 signaux par jour."; }
+  return '<div class="card ' + tone + '"><h3>' + title + '</h3><p class="muted small">' + txt + "</p>" +
+    '<p class="dim small" style="margin-top:6px">' + (r.lastSeen ? "Dernière analyse " + ago(r.lastSeen) : "Première analyse en cours…") + (r.open ? " · " + r.open + " trade" + (r.open > 1 ? "s" : "") + " en cours" : "") + "</p></div>";
+}
+
+function perfCard() {
+  const p = S.me.perf;
+  const u = S.me.user;
+  if (!p) return "";
+  if (!p.n) return '<div class="card"><h3>📈 Résultats du robot</h3><p class="muted small">Pas encore de signal terminé. Les résultats de chaque signal (gagné ou perdu) s\'afficheront ici, en toute transparence.</p></div>';
+  const money = p.R * u.riskMoney;
+  return '<div class="card"><h3>📈 Résultats du robot</h3><p class="muted small">Tous les signaux des ' + p.days + " derniers jours.</p>" +
+    '<div class="score"><div><b>' + p.n + '</b><small>signaux</small></div><div><b class="green">' + p.wins + '</b><small>✅ gagnés</small></div><div><b class="red">' + p.losses + "</b><small>❌ perdus</small></div></div>" +
+    '<div class="row" style="margin-top:12px"><span class="muted small">Avec ta perte max (' + eur(u.riskMoney) + ')</span><b style="text-align:right;font-size:20px" class="' + (money >= 0 ? "green" : "red") + '">' + eur(money, true) + "</b></div></div>";
+}
+
+function installCard() {
+  const standalone = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  if (standalone || LS.get("noinstall")) return "";
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  return '<div class="card"><div class="row" style="align-items:flex-start"><div><h3>📲 Mets l\'appli sur ton écran</h3><p class="muted small">' +
+    (ios ? "Dans Safari : touche <b>Partager</b> (carré avec flèche) › <b>Sur l'écran d'accueil</b>." : "Dans Chrome : touche <b>⋮</b> › <b>Installer l'application</b> (ou « Ajouter à l'écran d'accueil »).") +
+    '</p></div><button style="flex:none;color:var(--dim);font-size:20px;padding:4px 8px" data-act="noinstall" aria-label="Fermer">✕</button></div></div>';
+}
+
 function tabHome() {
   const { user: u, stats: st } = S.me;
   const rr = (S.me.robot && S.me.robot.rr) || 2;
   const lossToday = Math.max(0, -st.today);
   const stopPct = Math.min(100, (lossToday / (u.dailyStop || 1)) * 100);
-  let html = '<div class="hello">Salut ' + esc(u.name) + " 👋<small>" + (S.me.robot && S.me.robot.online ? "Le robot surveille les marchés pour toi." : "Le robot est hors ligne : pas de nouveau signal pour l'instant.") + "</small></div><div class=\"stack\">";
+  let html = '<div class="hello">Salut ' + esc(u.name) + " 👋</div><div class=\"stack\">";
   html += telegramCard(false);
   if (u.stoppedUntil) html += '<div class="card tone-red"><h3>🛑 Stop pour aujourd\'hui</h3><p class="muted">Tu as perdu ' + eur(lossToday) + " aujourd'hui. Plus de signaux jusqu'à demain : c'est ce qui protège ton compte.</p></div>";
   else if (u.paused) html += '<div class="card tone-gold"><h3>⏸️ Signaux en pause</h3><p class="muted">Tu ne reçois plus de nouveaux signaux.</p><button class="btn small green" style="margin-top:12px" data-act="resume">▶️ Reprendre</button></div>';
   html += liveCard();
+  html += robotCard();
   html += '<div class="card tone-violet"><div class="row" style="align-items:flex-start"><div><small class="muted" style="font-weight:600">💼 Ton capital</small><div class="big">' + eur0(u.capital) + '</div></div><button class="btn small ghost" style="flex:none" data-tab="account">Modifier</button></div>' +
     '<div class="kpis"><div class="kpi"><small>🔴 Perte max par trade</small><b class="red">' + eur(-u.riskMoney) + "</b><em>" + pct(u.riskPct) + " de ton capital</em></div>" +
     '<div class="kpi"><small>🟢 Gain visé par trade</small><b class="green">' + eur(u.riskMoney * rr, true) + "</b><em>" + rr + " × la perte max</em></div></div>" +
@@ -607,7 +644,7 @@ function tabHome() {
     '<div class="bar"><i style="width:' + stopPct.toFixed(0) + '%"></i></div><p class="dim small" style="margin-top:6px">🛡️ Stop automatique si tu perds ' + eur(u.dailyStop) + " dans la journée.</p></div></div>";
   html += '<div class="card"><h3>📊 Ton bilan</h3><p class="muted small">Si tu as suivi tous les signaux reçus.</p>' +
     '<div class="score"><div><b class="green">' + st.wins + '</b><small>✅ gagnés</small></div><div><b class="red">' + st.losses + "</b><small>❌ perdus</small></div><div><b>" + st.open + "</b><small>⏳ en cours</small></div></div>" +
-    '<div class="row" style="margin-top:12px"><span class="muted">Total</span><b style="text-align:right;font-size:22px" class="' + (st.money >= 0 ? "green" : "red") + '">' + eur(st.money, true) + "</b></div></div></div>";
+    '<div class="row" style="margin-top:12px"><span class="muted">Total</span><b style="text-align:right;font-size:22px" class="' + (st.money >= 0 ? "green" : "red") + '">' + eur(st.money, true) + "</b></div></div>" + perfCard() + installCard() + "</div>";
   html += '<div class="sec"><h2>Dernières alertes</h2>' + (S.alerts.length ? '<button data-tab="alerts">Tout voir ›</button>' : "") + "</div>";
   html += S.alerts.length ? S.alerts.slice(0, 4).map(alertRow).join("") : emptyAlerts();
   return html;
@@ -697,6 +734,7 @@ function tabAccount() {
     : telegramCard(true);
   html += '<div class="card"><h3>🔔 Alertes</h3><div class="setting"><div class="txt"><b>Recevoir les signaux</b><small>' + (u.paused ? "En pause : tu reçois seulement les résultats." : "Actif") + '</small></div><label class="sw"><input type="checkbox" data-act="pause"' + (u.paused ? "" : " checked") + "><i></i></label></div>" +
     '<p class="dim small" style="margin-top:8px">🛡️ Protections : 3 trades en cours max, et stop automatique pour la journée après ' + eur(u.dailyStop) + ' de pertes.</p></div>';
+  html += autoCard();
   if (u.admin) html += adminCard();
   html += '<div class="card"><h3>❓ Aide</h3>' +
     "<details><summary>C'est quoi le Stop Loss et le Take Profit ?</summary><p>Le <b>Stop Loss (SL)</b> est le prix où MT5 ferme ton trade tout seul si ça tourne mal : c'est ta perte maximum. Le <b>Take Profit (TP)</b> est le prix où il le ferme en gain. Mets-les <b>toujours</b> quand tu ouvres un trade.</p></details>" +
@@ -708,6 +746,17 @@ function tabAccount() {
   html += '<button class="btn line" data-act="logout">Se déconnecter</button><button class="btn danger" data-act="delete">Supprimer mon compte</button>' +
     '<p class="legal">AlertesPro · signaux automatiques, sans garantie de gain.<br>Pas un conseil en investissement. Le trading comporte un risque de perte en capital.</p></div>';
   return html;
+}
+
+function autoCard() {
+  const a = S.me.auto;
+  const on = a && nowS() - a.lastSeen < 180;
+  return '<div class="card ' + (on ? "tone-green" : "") + '"><h3>🤖 Ordres automatiques (compte démo)</h3>' +
+    (on ? '<p class="muted small">✅ Ton robot <b>AlertesPro Auto</b> est connecté (vu ' + ago(a.lastSeen) + "). Il passe tes signaux tout seul sur ton compte démo MT5.</p>"
+        : '<p class="muted small">' + (a ? "⚠️ Ton robot n'est plus connecté depuis " + ago(a.lastSeen) + " (PC éteint ou MT5 fermé ?)." : "Le robot <b>AlertesPro Auto</b> peut passer les ordres à ta place sur ton <b>compte démo</b> MT5 (ton PC doit rester allumé).") + "</p>" +
+          '<ol class="steps"><li>Sur ton PC, télécharge le robot (bouton ci-dessous)</li><li>MT5 › Fichier › Ouvrir le dossier des données › MQL5 › Experts : mets le fichier dedans, puis F7 dans MetaEditor</li>' +
+          '<li>Outils › Options › Expert Advisors › WebRequest : ajoute <span class="num">' + esc(API) + "</span></li><li>Glisse-le sur un graphique et écris ton e-mail et ton mot de passe AlertesPro</li></ol>" +
+          '<a class="btn small ghost" style="width:100%" href="../MQL5/Experts/AlertesProAuto.mq5" download>⬇️ Télécharger AlertesPro Auto</a>') + "</div>";
 }
 
 function inviteUrl(code) {
@@ -786,9 +835,11 @@ async function act(name, el) {
     }
     if (name === "forgot") { S.forgotStep = 1; Object.assign(S.form, readForm("login")); return go("forgot"); }
     if (name === "forgot-again") { S.forgotStep = 1; S.msg = ""; return render(); }
+    if (name === "noinstall") { LS.set("noinstall", "1"); return render(); }
     if (name === "eye") { const i = document.getElementById(el.dataset.for); i.type = i.type === "password" ? "text" : "password"; return; }
     if (S.demo) { if (el.type === "checkbox") el.checked = !el.checked; return toast("👀 C'est l'exemple : crée ton compte pour de vrai"); }
     if (name === "tg-open") { setTimeout(() => refresh(false), 8000); setTimeout(() => refresh(false), 20000); return; }
+    if (name === "refresh") { await refresh(); return toast("🔄 À jour"); }
     if (name === "check-tg") { await refresh(false); return toast(S.me.user.telegram.linked ? "✅ Telegram relié !" : "Pas encore relié : touche DÉMARRER dans Telegram"); }
     if (name === "resume") { setMe(await api("/api/me", "PUT", { paused: false })); toast("▶️ Signaux relancés"); return render(); }
     if (name === "pause") { setMe(await api("/api/me", "PUT", { paused: !el.checked })); toast(el.checked ? "🔔 Signaux activés" : "⏸️ Signaux en pause"); return render(); }
@@ -810,6 +861,7 @@ async function act(name, el) {
       toast("✅ Bot branché !"); S.form = {};
       await refresh(); return;
     }
+    if (name === "noinstall") { LS.set("noinstall", "1"); return render(); }
     if (name === "test") { await api("/api/me/test", "POST"); return toast("📨 Message envoyé sur ton Telegram"); }
     if (name === "relink") { if (!confirm("Délier ce Telegram et créer un nouveau code ?")) return; setMe(await api("/api/me/relink", "POST")); return render(); }
     if (name === "logout") return logout();

@@ -46,6 +46,7 @@ const SCHEMA = [
 ].join("\n");
 
 let schemaReady = false;
+const eaSeen = {};
 let savedToken = "";
 let hookReady = false;
 
@@ -398,14 +399,38 @@ async function newSession(env, userId) {
   return token;
 }
 
+// résultats de tous les signaux du robot sur 30 jours (pour l'appli)
+let perfCache = null;
+async function robotPerf(env) {
+  if (perfCache && Date.now() - perfCache.at < 300000) return perfCache.v;
+  const rows = (await env.DB.prepare("SELECT data FROM alerts WHERE kind = 'result' AND created > ?").bind(now() - 30 * 86400).all()).results || [];
+  let n = 0, wins = 0, losses = 0, R = 0;
+  for (const row of rows) {
+    let a = {};
+    try { a = JSON.parse(row.data); } catch (e) { continue; }
+    if (!Number.isFinite(a.r)) continue;
+    n++; R += a.r;
+    if (a.r > 0) wins++; else if (a.r < 0) losses++;
+  }
+  const v = { days: 30, n, wins, losses, R: Math.round(R * 100) / 100 };
+  perfCache = { at: Date.now(), v };
+  return v;
+}
+
 async function mePayload(env, u) {
   const bot = await botUsername(env);
   const rs = await robotStatus(env);
+  const t = now();
+  const ea = await kvGet(env, "ea:" + u.id);
   return {
     ok: true,
     user: publicUser(u, bot),
     stats: await userStats(env, u.id),
-    robot: { online: rs.online, lastSeen: rs.updated, symbols: rs.v && Array.isArray(rs.v.markets) ? rs.v.markets.map((m) => m.sym) : [], tf: rs.v ? rs.v.tf || "" : "", rr: rs.rr, cur: rs.cur },
+    robot: { online: rs.online, lastSeen: rs.updated, symbols: rs.v && Array.isArray(rs.v.markets) ? rs.v.markets.map((m) => m.sym) : [], tf: rs.v ? rs.v.tf || "" : "", rr: rs.rr, cur: rs.cur,
+      cloud: !!(rs.v && rs.v.ver === "cloud"), open: rs.v ? rs.v.open || 0 : 0, hours: [CLOUD.hourStart, CLOUD.hourEnd],
+      active: marketOpen(t) && inCloudHours(t), marketOpen: marketOpen(t) },
+    perf: await robotPerf(env),
+    auto: ea ? { lastSeen: ea.updated } : null,
     bot,
     limits: { riskMin: RISK_MIN, riskMax: RISK_MAX, riskDefault: RISK_DEFAULT, dailyStopPct: DAILY_STOP_PCT, maxOpen: MAX_OPEN },
   };
@@ -1339,6 +1364,7 @@ async function handle(req, env, ctx) {
     }
     if (path === "/api/alerts" && method === "GET") return apiAlerts(env, u, url);
     if (path === "/api/ea" && method === "GET") {
+      if (!eaSeen[u.id] || Date.now() - eaSeen[u.id] > 60000) { eaSeen[u.id] = Date.now(); await kvSet(env, "ea:" + u.id, { v: 1 }); }
       // signaux en cours pour le robot qui passe les ordres (format texte simple pour MT5)
       const rows = (await env.DB.prepare("SELECT d.id, d.lot, a.data FROM deliveries d JOIN alerts a ON a.id = d.alert_id WHERE d.user_id = ? AND d.kind = 'signal' AND d.result IS NULL AND d.lot > 0 AND d.created > ? ORDER BY d.id")
         .bind(u.id, now() - 3600).all()).results || [];
