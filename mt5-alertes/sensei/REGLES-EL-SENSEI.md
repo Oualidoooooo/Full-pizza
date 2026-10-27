@@ -73,3 +73,39 @@ Elles servent à tester ses règles sur l'historique et à les ajouter au robot 
 - Livres conseillés : *Trading in the Zone* (Mark Douglas), *Le Moine qui vendit sa Ferrari*, *Les secrets d'un esprit millionnaire*,
   *L'homme le plus riche de Babylone*, *Ne vous noyez pas dans un verre d'eau*.
 - Habitudes : se lever tôt, sport, lecture, « méditer les yeux ouverts » pour réfléchir, tenir un journal.
+
+## Order blocks (vidéos #25, #24, #17)
+- **Order block** = **la dernière bougie de couleur contraire juste avant un mouvement fort** (fort = plus grand que le mouvement d'avant).
+  Bougie rouge avant une forte hausse = zone d'**achat** ; bougie verte avant une forte baisse = zone de **vente**.
+- On encadre la bougie (corps, sans la mèche si elle est très longue) et on prolonge la zone : quand le prix revient, il réagit souvent fort.
+- Les meilleurs sont sur les **sommets et les creux**. Ne pas en marquer trop : le graphique doit rester simple.
+- **Confirmer** : le prix fait du surplace (accumulation) dans la zone, **ou** un nouvel order block se forme en **M15** à l'intérieur de celui de **H1**.
+- **H1 = direction, M15 = entrée** (stop plus petit, entrée plus précise).
+- « Order block en cassure » : zone cassée puis réutilisée de l'autre côté (comme un support devenu résistance).
+
+## Scalping (vidéo #27)
+- Graphique **1 minute** (rien au-dessus de 15 min), **7 h – 12 h New York** (13 h – 18 h Paris).
+- Un niveau touché **3 fois** (horizontal ou en diagonale) : au **3e toucher**, entrer **dans le sens des touches**
+  (touches en haut → **achat**, touches en bas → **vente**). **Stop Loss 7 pips, Take Profit 7 pips** (1 : 1).
+- Si des touches se forment **en haut et en bas** (le prix tourne en rond) : **ne rien faire**.
+- Il dit que c'est « validé par la statistique » et qu'on pourrait le mettre dans un robot.
+
+## Bases (vidéos #01, #26)
+- Forex ouvert du dimanche 17 h au vendredi 17 h (New York). Il règle toujours son graphique **à l'heure de New York**.
+- Il analyse sur ordinateur (TradingView), passe les ordres sur MT5 (téléphone).
+- **1 % maximum par trade et 1 % par jour.** 5 % par mois, c'est déjà très bien ; viser plus mène à tout perdre.
+
+---
+
+# Ce qui a été testé sur les vrais prix et ajouté au robot
+
+Tests faits sur 6 mois de bougies H1 et 2 mois de bougies M15, 11 marchés (R = 1 fois la perte max).
+
+| Règle d'El Sensei | Résultat du test | Décision |
+|---|---|---|
+| **Tout fermer le soir** (on ne garde rien la nuit) | H1 : **+14 R → +25 R** sur 6 mois, pire baisse **14,5 R → 7 R**. Meilleur sur les 2 moitiés de la période, et de 19 h à 22 h | ✅ **Ajouté** : fermeture à **21 h** |
+| **Pas de trade autour des annonces fortes** | Impossible à tester exactement (pas d'historique du calendrier). Approximation 14 h 30 : résultat neutre, série de pertes H1 7 → 4 | ✅ **Ajouté** (règle de sécurité) : rien 30 min avant / 15 min après une annonce rouge Forex Factory |
+| **1 seul trade par jour** + pause après **3 pertes dans la semaine** | ~1 signal/jour au lieu de 4. Gain par trade ×2 (0,53 R au lieu de 0,24 R), pire baisse **2,5 R au lieu de 11 R**, mais gain total plus petit | ✅ **En option** : « Mode El Sensei » (appli › Compte, ou /sensei) |
+| Seulement Londres 8–11 h + New York 14–17 h | 2 signaux/jour, moins de gain total | ❌ Pas ajouté (tu voulais 4 alertes par jour) |
+| Rejeter les bougies géantes (annonces) | Un peu moins bien | ❌ Pas ajouté |
+| Scalping 3 touches, SL/TP 7 pips | 60 jours en 2 min sur 4 paires : **aucun avantage** (USDJPY −18 R, les autres ≈ 0 avec l'écart du courtier) | ❌ Pas ajouté |
