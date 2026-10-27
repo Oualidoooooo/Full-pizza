@@ -109,3 +109,4 @@ Tests faits sur 6 mois de bougies H1 et 2 mois de bougies M15, 11 marchés (R = 
 | Seulement Londres 8–11 h + New York 14–17 h | 2 signaux/jour, moins de gain total | ❌ Pas ajouté (tu voulais 4 alertes par jour) |
 | Rejeter les bougies géantes (annonces) | Un peu moins bien | ❌ Pas ajouté |
 | Scalping 3 touches, SL/TP 7 pips | 60 jours en 2 min sur 4 paires : **aucun avantage** (USDJPY −18 R, les autres ≈ 0 avec l'écart du courtier) | ❌ Pas ajouté |
+| Order blocks H1 (zone retouchée, sens de la tendance H4, SL derrière la zone) | 6 mois, 11 marchés, 8 réglages : **tous perdants** (−13 à −142 R). Sans l'œil humain pour choisir « le bon » order block, la règle seule ne marche pas | ❌ Pas ajouté |
